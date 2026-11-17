@@ -1,0 +1,6 @@
+dist
+node_modules
+coverage
+package-lock.json
+# Planning documents are edited by hand; do not reformat.
+docs
