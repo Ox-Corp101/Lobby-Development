@@ -31,10 +31,7 @@ export default function SignUpPage() {
       navigate('/check-email');
       return;
     }
-    setNotice({
-      tone: result.kind === 'not_connected' ? 'info' : 'error',
-      text: authErrorMessage(result),
-    });
+    setNotice({ tone: 'error', text: authErrorMessage(result) });
   });
 
   return (

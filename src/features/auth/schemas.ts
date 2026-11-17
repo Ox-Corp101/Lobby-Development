@@ -1,12 +1,20 @@
 import { z } from 'zod';
 
 /**
- * Password length limits.
- * MAX is PROVISIONAL: Supabase's hashing limit is believed to be 72 characters.
- * It must be verified against Supabase in Step 4 before integration.
+ * Password limits.
+ * - Minimum: 8 characters (counted as user-visible characters, so an emoji is 1).
+ * - Maximum: 72 UTF-8 BYTES — PROVISIONAL. Supabase hashes passwords with bcrypt,
+ *   which works on bytes, so accented letters (2 bytes) and emoji (4 bytes) use
+ *   up more of the limit. Must be confirmed against the hosted Supabase project
+ *   before this rule is treated as final.
+ * No uppercase / number / symbol requirements (approved).
  */
 export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MAX_LENGTH = 72;
+export const PASSWORD_MAX_BYTES = 72;
+
+const encoder = new TextEncoder();
+export const utf8ByteLength = (value: string) => encoder.encode(value).length;
+const characterCount = (value: string) => Array.from(value).length;
 
 const email = z
   .string()
@@ -15,11 +23,17 @@ const email = z
   .max(254, 'Email address is too long')
   .pipe(z.email('Enter a valid email address'));
 
-// New passwords (sign-up, reset): length rules only — no composition rules.
+// New passwords (sign-up, reset): length rules only.
 const newPassword = z
   .string()
-  .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
-  .max(PASSWORD_MAX_LENGTH, `Password must be ${PASSWORD_MAX_LENGTH} characters or fewer`);
+  .refine((value) => characterCount(value) >= PASSWORD_MIN_LENGTH, {
+    message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+  })
+  .refine((value) => utf8ByteLength(value) <= PASSWORD_MAX_BYTES, {
+    message:
+      'Password is too long. The limit is 72 bytes — most letters count as 1, ' +
+      'accented letters as 2 and emoji as 4.',
+  });
 
 // Existing passwords (sign-in): only check that something was entered, so the
 // form never hints at which passwords would be valid.
@@ -27,10 +41,10 @@ const currentPassword = z.string().min(1, 'Enter your password');
 
 export const signUpSchema = z.object({ email, password: newPassword });
 export const signInSchema = z.object({ email, password: currentPassword });
-export const forgotPasswordSchema = z.object({ email });
+export const emailOnlySchema = z.object({ email });
 export const resetPasswordSchema = z.object({ password: newPassword });
 
 export type SignUpValues = z.infer<typeof signUpSchema>;
 export type SignInValues = z.infer<typeof signInSchema>;
-export type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
+export type EmailOnlyValues = z.infer<typeof emailOnlySchema>;
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;

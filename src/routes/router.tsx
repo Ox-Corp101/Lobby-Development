@@ -9,19 +9,30 @@ import SignUpPage from '../features/auth/pages/SignUpPage';
 import ProfilePage from '../features/profile/pages/ProfilePage';
 import HomePage from '../pages/HomePage';
 import NotFoundPage from '../pages/NotFoundPage';
+import { GuestOnlyRoute, ProtectedRoute } from './ProtectedRoute';
 
 export const router = createBrowserRouter([
   {
     element: <AppLayout />,
     children: [
       { path: '/', element: <HomePage /> },
-      { path: '/sign-up', element: <SignUpPage /> },
+      // Signed-in riders are redirected away from these.
+      {
+        element: <GuestOnlyRoute />,
+        children: [
+          { path: '/sign-up', element: <SignUpPage /> },
+          { path: '/sign-in', element: <SignInPage /> },
+        ],
+      },
       { path: '/check-email', element: <CheckEmailPage /> },
       { path: '/auth/confirm', element: <ConfirmEmailPage /> },
-      { path: '/sign-in', element: <SignInPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
-      { path: '/profile', element: <ProfilePage /> },
+      // Signed-in riders only.
+      {
+        element: <ProtectedRoute />,
+        children: [{ path: '/profile', element: <ProfilePage /> }],
+      },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

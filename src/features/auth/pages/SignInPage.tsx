@@ -6,23 +6,30 @@ import { Button } from '../../../components/ui/Button';
 import FormAlert from '../../../components/ui/FormAlert';
 import PasswordField from '../../../components/ui/PasswordField';
 import TextField from '../../../components/ui/TextField';
+import { safeRedirectPath, type SignInLocationState } from '../../../routes/redirects';
 import AuthCard, { authLinkClasses } from '../components/AuthCard';
-import { authErrorMessage, authService } from '../authService';
+import { authErrorMessage, authService, type AuthResult } from '../authService';
 import { signInSchema, type SignInValues } from '../schemas';
 
-/** Navigation state that sign-out passes explicitly (Step 4). */
-export type SignInLocationState = { signedOut?: boolean };
+const RESENT = 'If that email address is waiting for confirmation, we’ve sent a new link.';
 
 export default function SignInPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const locationState = location.state as SignInLocationState | null;
   // The notice appears only when sign-out explicitly says so — never by default.
-  const signedOut = (location.state as SignInLocationState | null)?.signedOut === true;
-  const [error, setError] = useState<string>();
-  const [notConnected, setNotConnected] = useState(false);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const signedOut = locationState?.signedOut === true && !noticeDismissed;
+  const [failure, setFailure] = useState<AuthResult>();
+  const [resend, setResend] = useState<{
+    sending: boolean;
+    message?: string;
+    tone?: 'info' | 'error';
+  }>({ sending: false });
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<SignInValues>({
     resolver: zodResolver(signInSchema),
@@ -31,16 +38,29 @@ export default function SignInPage() {
   });
 
   const onSubmit = handleSubmit(async (values) => {
-    setError(undefined);
-    setNotConnected(false);
+    setNoticeDismissed(true);
+    setFailure(undefined);
+    setResend({ sending: false });
     const result = await authService.signIn(values);
     if (result.kind === 'ok') {
-      navigate('/profile');
+      // Back to the page the rider originally asked for — internal paths only.
+      navigate(safeRedirectPath(locationState?.from), { replace: true });
       return;
     }
-    if (result.kind === 'not_connected') setNotConnected(true);
-    else setError(authErrorMessage(result));
+    setFailure(result);
   });
+
+  // Only offered after Supabase has confirmed the password was correct.
+  const resendConfirmation = async () => {
+    if (resend.sending) return;
+    setResend({ sending: true });
+    const result = await authService.resendConfirmation({ email: getValues('email').trim() });
+    setResend(
+      result.kind === 'ok'
+        ? { sending: false, tone: 'info', message: RESENT }
+        : { sending: false, tone: 'error', message: authErrorMessage(result) },
+    );
+  };
 
   return (
     <AuthCard
@@ -57,11 +77,22 @@ export default function SignInPage() {
     >
       <form noValidate onSubmit={onSubmit} className="space-y-5">
         <FormAlert tone="success" message={signedOut ? 'You’ve signed out.' : undefined} />
-        <FormAlert tone="error" message={error} />
-        <FormAlert
-          tone="info"
-          message={notConnected ? authErrorMessage({ kind: 'not_connected' }) : undefined}
-        />
+        <FormAlert tone="error" message={failure ? authErrorMessage(failure) : undefined} />
+        {failure?.kind === 'email_not_confirmed' && (
+          <div className="space-y-3">
+            <FormAlert tone={resend.tone} message={resend.message} />
+            <Button
+              variant="secondary"
+              size="lg"
+              className="w-full"
+              loading={resend.sending}
+              loadingLabel="Sending…"
+              onClick={resendConfirmation}
+            >
+              Resend confirmation email
+            </Button>
+          </div>
+        )}
         <TextField
           label="Email"
           type="email"

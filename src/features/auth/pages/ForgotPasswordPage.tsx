@@ -7,7 +7,7 @@ import FormAlert from '../../../components/ui/FormAlert';
 import TextField from '../../../components/ui/TextField';
 import AuthCard, { authLinkClasses } from '../components/AuthCard';
 import { authErrorMessage, authService } from '../authService';
-import { forgotPasswordSchema, type ForgotPasswordValues } from '../schemas';
+import { emailOnlySchema, type EmailOnlyValues } from '../schemas';
 
 // Neutral reply: identical whether or not the email has an account.
 const SENT_MESSAGE =
@@ -19,8 +19,8 @@ export default function ForgotPasswordPage() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<ForgotPasswordValues>({
-    resolver: zodResolver(forgotPasswordSchema),
+  } = useForm<EmailOnlyValues>({
+    resolver: zodResolver(emailOnlySchema),
     mode: 'onTouched',
     defaultValues: { email: '' },
   });
@@ -29,11 +29,7 @@ export default function ForgotPasswordPage() {
     setNotice(undefined);
     const result = await authService.requestPasswordReset(values);
     if (result.kind === 'ok') setNotice({ tone: 'info', text: SENT_MESSAGE });
-    else
-      setNotice({
-        tone: result.kind === 'not_connected' ? 'info' : 'error',
-        text: authErrorMessage(result),
-      });
+    else setNotice({ tone: 'error', text: authErrorMessage(result) });
   });
 
   return (

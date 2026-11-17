@@ -1,28 +1,34 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Link } from 'react-router';
-import { buttonClasses } from '../ui/Button';
-import { publicNavLinks } from './navigation';
+import { Button, buttonClasses } from '../ui/Button';
+import type { NavLink } from './navigation';
+
+type MobileMenuProps = {
+  links: readonly NavLink[];
+  /** Present only for signed-in riders. */
+  signOut?: { onClick: () => void; loading: boolean };
+};
 
 /**
  * Phone-sized navigation (hidden from 640px up).
  * Accessible disclosure menu:
  *  - the toggle announces its state with aria-expanded / aria-controls
- *  - opening moves focus to the first link
+ *  - opening moves focus to the first item
  *  - Esc closes and returns focus to the toggle
- *  - tapping outside, tabbing out, choosing a link, or widening the
+ *  - tapping outside, tabbing out, choosing an item, or widening the
  *    screen past the phone breakpoint closes it
  */
-export default function MobileMenu() {
+export default function MobileMenu({ links, signOut }: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
-  const firstLinkRef = useRef<HTMLAnchorElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   // Move focus into the menu when it opens.
   useEffect(() => {
-    if (open) firstLinkRef.current?.focus();
+    if (open) panelRef.current?.querySelector<HTMLElement>('a, button')?.focus();
   }, [open]);
 
   // Close on outside tap, and when the viewport grows past the phone breakpoint.
@@ -92,16 +98,16 @@ export default function MobileMenu() {
       </button>
 
       <nav
+        ref={panelRef}
         id={panelId}
         aria-label="Main"
         hidden={!open}
         className="absolute inset-x-0 top-full border-b border-line bg-surface shadow-lg"
       >
         <ul className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-4">
-          {publicNavLinks.map((link, index) => (
+          {links.map((link) => (
             <li key={link.to}>
               <Link
-                ref={index === 0 ? firstLinkRef : undefined}
                 to={link.to}
                 className={buttonClasses(link.variant, 'lg', 'w-full')}
                 onClick={() => close(false)}
@@ -110,6 +116,23 @@ export default function MobileMenu() {
               </Link>
             </li>
           ))}
+          {signOut && (
+            <li>
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-full"
+                loading={signOut.loading}
+                loadingLabel="Signing out…"
+                onClick={() => {
+                  close(false);
+                  signOut.onClick();
+                }}
+              >
+                Sign out
+              </Button>
+            </li>
+          )}
         </ul>
       </nav>
     </div>

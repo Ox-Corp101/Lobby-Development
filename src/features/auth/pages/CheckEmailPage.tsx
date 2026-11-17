@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import AuthCard, { authLinkClasses } from '../components/AuthCard';
+import ResendConfirmation from '../components/ResendConfirmation';
 
 // Deliberately neutral: identical whether or not the address already has an
 // account, and it never shows the address itself.
@@ -19,7 +20,11 @@ export default function CheckEmailPage() {
           link.
         </p>
         <p>Open the link to confirm your email. You can sign in once your email is confirmed.</p>
-        <p>Can’t find it? Check your spam or junk folder.</p>
+        <p>Can’t find it? Check your spam or junk folder, or send a new link below.</p>
+      </div>
+      <div className="mt-6 border-t border-line pt-6">
+        <h2 className="mb-4 font-semibold">Didn’t get the email?</h2>
+        <ResendConfirmation />
       </div>
     </AuthCard>
   );
