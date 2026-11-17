@@ -35,7 +35,14 @@ export default function ForgotPasswordPage() {
   return (
     <AuthCard
       title="Reset your password"
-      description="Enter your email and we’ll send you a link to choose a new password."
+      description={
+        <>
+          Enter your email and we’ll send you a link to choose a new password.{' '}
+          <strong className="text-ink">
+            Open the link in this same browser — it won’t work anywhere else.
+          </strong>
+        </>
+      }
       footer={
         <Link to="/sign-in" className={authLinkClasses}>
           Back to sign in

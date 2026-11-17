@@ -20,6 +20,11 @@ export default function CheckEmailPage() {
           link.
         </p>
         <p>Open the link to confirm your email. You can sign in once your email is confirmed.</p>
+        <p>
+          <strong className="text-ink">Tip:</strong> open the link in this same browser to be signed
+          in automatically. If you open it somewhere else, your email will still be confirmed and
+          you can sign in with your password.
+        </p>
         <p>Can’t find it? Check your spam or junk folder, or send a new link below.</p>
       </div>
       <div className="mt-6 border-t border-line pt-6">

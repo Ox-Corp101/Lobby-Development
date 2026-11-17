@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button, ButtonLink } from '../../../components/ui/Button';
 import FormAlert from '../../../components/ui/FormAlert';
 import PasswordField from '../../../components/ui/PasswordField';
@@ -9,12 +9,13 @@ import AuthCard, { authLinkClasses } from '../components/AuthCard';
 import {
   authErrorMessage,
   authService,
-  readEmailLink,
+  readAuthCallback,
   RECOVERY_LINK_TYPES,
   type AuthResult,
 } from '../authService';
 import { PASSWORD_MIN_LENGTH, resetPasswordSchema, type ResetPasswordValues } from '../schemas';
 import { useAuth } from '../useAuth';
+import { useCleanAuthUrl } from '../useCleanAuthUrl';
 
 const RETRYABLE: AuthResult['kind'][] = ['network_error', 'rate_limited', 'error'];
 
@@ -26,15 +27,23 @@ function NewLinkFooter() {
   );
 }
 
+function Checking() {
+  return (
+    <AuthCard title="Reset your password">
+      <p role="status" className="text-ink-muted">
+        Checking your reset link…
+      </p>
+    </AuthCard>
+  );
+}
+
 export default function ResetPasswordPage() {
   const auth = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [link] = useState(() => readEmailLink(searchParams, RECOVERY_LINK_TYPES));
-  const hadLinkParams = useState(
-    () => searchParams.has('token_hash') || searchParams.has('type'),
-  )[0];
+  const location = useLocation();
+  // Read the address exactly once; everything below works from this copy.
+  const [callback] = useState(() => readAuthCallback(location, RECOVERY_LINK_TYPES));
   const [linkResult, setLinkResult] = useState<AuthResult>();
-  const [verifying, setVerifying] = useState(false);
+  const [verifying, setVerifying] = useState(callback.kind === 'code');
   const inFlight = useRef(false);
   const [updated, setUpdated] = useState(false);
   const [notice, setNotice] = useState<string>();
@@ -49,21 +58,35 @@ export default function ResetPasswordPage() {
     defaultValues: { password: '' },
   });
 
-  // Remove the one-time token from the address bar once it has been read.
+  // PKCE recovery code (Supabase's default reset email): exchange automatically,
+  // once. It only works with the verifier stored in this browser when the reset
+  // was requested; success starts a recovery session for choosing a new password.
   useEffect(() => {
-    if (searchParams.has('token_hash') || searchParams.has('type')) {
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
+    if (callback.kind !== 'code') return;
+    let active = true;
+    void authService.exchangeCode(callback.code, callback.flowId).then((outcome) => {
+      if (!active) return;
+      setLinkResult(outcome);
+      setVerifying(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [callback]);
 
-  // Deliberate action: the recovery token is only used when the rider presses
-  // the button, never on page load.
+  // Clean the address bar and history. A PKCE code is removed only after its
+  // single exchange attempt has finished — after any outcome it can't be used
+  // again (supabase-js deletes the verifier) — so it's never removed early.
+  useCleanAuthUrl(callback.kind !== 'code' || linkResult !== undefined);
+
+  // Token-hash links only (a PKCE code can't be retried).
   const verifyLink = async () => {
-    if (!link || inFlight.current) return;
+    if (callback.kind !== 'token_hash' || inFlight.current) return;
     inFlight.current = true;
     setVerifying(true);
     setLinkResult(undefined);
-    setLinkResult(await authService.verifyEmailLink(link));
+    const outcome = await authService.verifyEmailLink(callback.link);
+    setLinkResult(outcome);
     setVerifying(false);
     inFlight.current = false;
   };
@@ -92,14 +115,62 @@ export default function ResetPasswordPage() {
     );
   }
 
-  const linkUnusable = (hadLinkParams && !link) || linkResult?.kind === 'invalid_or_expired_link';
-  if (linkUnusable && auth.status !== 'signedIn') {
+  // Recovery code opened in another browser: no verifier here, so no session.
+  if (linkResult?.kind === 'different_browser') {
+    return (
+      <AuthCard title="Open the link in the same browser" footer={<NewLinkFooter />}>
+        <FormAlert tone="error" message={authErrorMessage(linkResult)} />
+        <p className="mt-4 text-ink-muted">
+          For your security, a password reset link works only once, and only in the browser where
+          you requested it. Open your newest reset email in that browser, or request a new reset
+          link from this browser.
+        </p>
+        <ButtonLink to="/forgot-password" variant="secondary" size="lg" className="mt-6 w-full">
+          Request a new reset link
+        </ButtonLink>
+      </AuthCard>
+    );
+  }
+
+  // The single PKCE exchange failed for a temporary reason. The code is now
+  // unusable in this browser, so the rider needs a new reset link.
+  if (callback.kind === 'code' && linkResult && RETRYABLE.includes(linkResult.kind)) {
+    return (
+      <AuthCard title="We couldn’t check your reset link" footer={<NewLinkFooter />}>
+        <FormAlert
+          tone="error"
+          message={
+            linkResult.kind === 'network_error'
+              ? 'We couldn’t reach Lobby while checking this link.'
+              : 'Something went wrong while checking this link.'
+          }
+        />
+        <p className="mt-4 text-ink-muted">
+          This reset link can’t be used again. Check your connection, then request a new reset link
+          from this browser.
+        </p>
+        <ButtonLink to="/forgot-password" variant="secondary" size="lg" className="mt-6 w-full">
+          Request a new reset link
+        </ButtonLink>
+      </AuthCard>
+    );
+  }
+
+  const unusable =
+    callback.kind === 'malformed' ||
+    callback.kind === 'implicit_fragment' ||
+    callback.kind === 'error' ||
+    linkResult?.kind === 'invalid_or_expired_link';
+  if (unusable) {
+    const expired =
+      linkResult?.kind === 'invalid_or_expired_link' ||
+      (callback.kind === 'error' && callback.result.kind === 'invalid_or_expired_link');
     return (
       <AuthCard title="Link can’t be used" footer={<NewLinkFooter />}>
         <FormAlert
           tone="error"
           message={
-            link
+            expired
               ? authErrorMessage({ kind: 'invalid_or_expired_link' })
               : 'This reset link is incomplete or invalid.'
           }
@@ -109,6 +180,12 @@ export default function ResetPasswordPage() {
         </ButtonLink>
       </AuthCard>
     );
+  }
+
+  // A recovery code is still being exchanged: wait for Supabase's answer before
+  // showing anything else (even to a rider who is already signed in).
+  if (callback.kind === 'code' && verifying && !linkResult) {
+    return <Checking />;
   }
 
   // The new-password form needs a session: from the verified recovery link,
@@ -140,11 +217,21 @@ export default function ResetPasswordPage() {
     );
   }
 
-  if (link) {
+  // Code exchanged; waiting for the new recovery session to register.
+  if (linkResult?.kind === 'ok') {
+    return <Checking />;
+  }
+
+  // Token-hash link (custom templates, later): button press, retry possible.
+  if (callback.kind === 'token_hash') {
     return (
       <AuthCard
         title="Reset your password"
-        description="Press the button to continue resetting your Lobby password."
+        description={
+          callback.kind === 'token_hash' && !linkResult
+            ? 'Press the button to continue resetting your Lobby password.'
+            : undefined
+        }
         footer={<NewLinkFooter />}
       >
         <div className="space-y-5">
@@ -160,7 +247,7 @@ export default function ResetPasswordPage() {
             variant="primary"
             size="lg"
             className="w-full"
-            loading={verifying || (linkResult?.kind === 'ok' && auth.status === 'loading')}
+            loading={verifying}
             loadingLabel="Checking link…"
             onClick={verifyLink}
           >
@@ -174,7 +261,8 @@ export default function ResetPasswordPage() {
   return (
     <AuthCard title="Reset your password" footer={<NewLinkFooter />}>
       <p className="text-ink-muted">
-        To choose a new password, open the reset link we emailed you. If you don’t have one, you can
+        To choose a new password, open the reset link we emailed you{' '}
+        <strong className="text-ink">in this same browser</strong>. If you don’t have one, you can
         request a new link.
       </p>
       <ButtonLink to="/forgot-password" variant="secondary" size="lg" className="mt-6 w-full">

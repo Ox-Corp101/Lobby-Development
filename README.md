@@ -73,21 +73,52 @@ The publishable key does not protect any data by itself. Data access is controll
 
 - **Authentication → Sign In / Providers → Email:** email provider enabled, **Confirm email** on, minimum password length 8, no required characters.
 - **Authentication → URL Configuration:** Site URL `http://localhost:5173`, Redirect URLs `http://localhost:5173/**`.
-- **Authentication → Email Templates:**
-  - **Confirm signup:** the link must be `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
-  - **Reset password:** the link must be `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery`
+- **Email templates: leave them as Supabase's defaults.** New Free-plan projects can't customise authentication email templates without a custom SMTP provider.
 
-Lobby only uses an email link after the rider presses a button on the page. This stops email security scanners, which often pre-open links, from using up the one-time link.
+### How email links work (PKCE)
 
-**Reloading a link page:** when the confirmation or reset page opens, Lobby removes the one-time code from the address bar so it doesn't stay in browser history. If the page is reloaded **before** the rider presses **Confirm my email** or **Continue**, the page says the link is incomplete. The code has not been used, so the rider just reopens the original email link. Lobby deliberately does not use the code automatically on page load.
+Lobby uses Supabase's **PKCE** flow, which works with the default email templates:
 
-**Password reset form:** the recovery form asks only for the new password. Supabase rejects a new password that is the same as the current one, and Lobby shows "Your new password must be different from your current one."
+1. When a rider signs up or asks for a password reset, the browser stores a secret **code verifier**.
+2. The email link goes to Supabase first. Supabase checks the link (confirming the email, for sign-up) and redirects to Lobby with a short-lived, single-use `?code=`.
+3. Lobby's `/auth/confirm` or `/reset-password` page exchanges that code for a session, **automatically and once**. The exchange only works in the browser holding the matching verifier.
+4. After that single attempt, Lobby removes the code (and any auth values in the `#fragment`) from the address bar and replaces the current history entry, so Back/Forward never return to it.
+
+**Each code gets exactly one exchange attempt.** supabase-js deletes the browser's verifier after any failed exchange (including network errors), so a code can't be retried. If the exchange fails, Lobby explains what to do next: for confirmation, sign in (the email is most likely already confirmed); for a reset, request a new link.
+
+**Browser history:** browsers record the address in their History list as the page arrives, before any page script runs, so the redirect address with `?code=` still appears in the browser's History list. No website can prevent that. With PKCE this is low-risk: by then the code has been used, it expires within minutes, and it's useless without the verifier, which has been deleted.
+
+Security notes:
+
+- Access and refresh tokens are never put in the URL. If an old-style link arrives with tokens in the `#fragment`, Lobby ignores them (they are never read, stored or used to sign in) and wipes them from the address bar.
+- The client never reads sessions from URLs by itself (`detectSessionInUrl: false`); only the two landing pages process codes.
+
+**Same-browser requirement:**
+
+- **Email confirmation:** opening the link in the browser where the rider signed up confirms the email **and** signs them in. Opening it in another browser still confirms the email, but the rider then signs in with their password.
+- **Password reset:** the link **only works in the browser where the reset was requested.** In any other browser (including an email app's built-in browser on a phone), Lobby asks the rider to open it in the original browser or request a new link there.
+
+**Password reset form:** the recovery form asks only for the new password. Supabase rejects a new password that is the same as the current one, and Lobby shows "Your new password must be different from your current one." After a successful change, Lobby signs out this device so the rider signs in with the new password.
+
+**Custom templates later:** Lobby also supports a `token_hash` link format (verified only when the rider presses a button), for when custom SMTP and custom templates are configured.
 
 ### Development limitations
 
 - **Email links point to `http://localhost:5173`**, so they only work on the same computer that is running `npm run dev`. Open them on that Mac, not on a phone or another computer. Cross-device testing needs a reachable staging or production address, which comes later.
-- **Supabase's built-in email sender has a default limit of 2 emails per hour** and is meant for testing only. It is not suitable for production. A custom email (SMTP) provider is a separate launch decision.
+- **Supabase's built-in email sender has a default limit of 2 emails per hour** and is meant for testing only. It is not suitable for production.
+- **Default email templates (Free plan):** Supabase's own wording and sender are used, and the template can't be changed without custom SMTP.
+- **Email security scanners** that pre-open links can use up a default-template link before the rider clicks it. For confirmation the account is still confirmed (the rider just signs in); for password reset the rider has to request a new link.
+- **Only the newest email link works in each browser.** Without the token-hash templates, supabase-js keeps one active verifier per browser (for the most recent sign-up or reset request). If a rider requests two reset emails, only the newest link works, and opening an older link first means requesting a new one.
 - **Leaked-password protection** is a Supabase Pro-plan feature and is not available on the Free plan.
+
+### Launch requirement: custom SMTP and token-hash templates
+
+Before launch, configure a **custom SMTP provider** and switch the confirmation and reset emails to **token-hash templates**:
+
+- Confirm signup: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email`
+- Reset password: `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery`
+
+This removes the same-browser requirement (important for riders who open email on their phones), stops email scanners from using up links, and lifts the built-in sender's rate limit. Choosing the provider is a separate decision.
 
 ## Environment files and secrets
 
