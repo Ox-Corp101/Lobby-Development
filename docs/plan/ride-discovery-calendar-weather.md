@@ -1,6 +1,6 @@
 # LOBBY — Ride Discovery, Calendar & Weather Requirements
 
-**Status:** Revision 3. All product decisions from the second review are applied. Awaiting explicit approval. **Do not begin architecture implementation or development until this plan is approved.**
+**Status:** Revision 4. Third-review decisions and conflict resolutions are applied. Awaiting review. **Do not begin architecture implementation or development until this plan is explicitly approved.**
 **Type:** Addendum to the Lobby development plan.
 **Milestone:** Core Ride Lobby, except where marked otherwise.
 
@@ -11,9 +11,10 @@
 | Label | Meaning |
 |---|---|
 | **[APPROVED]** | Decided by the product owner. Approved for the Core Ride Lobby milestone once this plan is signed off. |
+| **[APPROVED — PROVISIONAL VALUE]** | The behavior is approved. The number is a proposed default that still needs final confirmation. |
 | **[FUTURE]** | Approved direction, but not part of the core release. |
 | **[ENHANCEMENT — REQUIRES APPROVAL]** | Separate work item. Needs explicit approval before any design or build work. |
-| **[TECH DIRECTION]** | Approved architectural recommendation. Documented only; nothing is built or selected until development is approved. |
+| **[TECH DIRECTION]** | Approved architectural direction. Documented only; nothing is built, configured or selected. Final architecture approval is separate. |
 | **[PROPOSED]** | Suggested by the plan author and **not yet approved** (see §12). |
 | **[OPEN]** | An unresolved decision (see §12). |
 
@@ -24,29 +25,35 @@
 | Area | Label |
 |---|---|
 | Personal Ride Calendar (section lists) | **[APPROVED]** |
+| "Left" history entries in Past Rides | **[APPROVED]** |
 | Month-grid calendar view | **[FUTURE]** |
-| Nearby Ride Search (list view) | **[APPROVED]** |
+| Nearby Ride Search (list view, future departures only) | **[APPROVED]** |
 | Map-based discovery | **[FUTURE]** |
 | Ride Creation (minimum capacity 2, time zone from the meeting point) | **[APPROVED]** |
-| Capacity and seat rules, including full-ride and capacity-reduction rules | **[APPROVED]** |
-| Seat-available notifications to Tentative / Pending riders (no automatic promotion) | **[APPROVED]** |
+| Capacity, full-ride and capacity-reduction rules | **[APPROVED]** |
+| Organizer removal of confirmed participants (reason required) | **[APPROVED]** |
+| Seat-available notifications (no seat reservation, no automatic promotion) | **[APPROVED]** |
 | Automated waitlist | Out of scope for the initial release |
-| Private rides via secure invitation links (expiry, usage limits, revocation) | **[APPROVED]** |
-| Private rides via direct invitations | **[FUTURE]** |
+| Re-requesting after a decline | **[APPROVED]** |
+| Private rides via secure invitation links | **[APPROVED]** |
+| Invitation link defaults (50 joins, 30-day maximum expiry) | **[APPROVED — PROVISIONAL VALUE]** |
+| Direct invitations | **[FUTURE]** |
+| Invitation emails | **[FUTURE]** (not in the initial release) |
 | Rejoining a ride | **[APPROVED]** |
 | Ride and participant statuses | **[APPROVED]** |
-| Rescheduling with reconfirmation tracking visible to the organizer | **[APPROVED]** |
+| Rescheduling with reconfirmation tracking | **[APPROVED]** |
 | Reconfirmation deadlines | **[FUTURE]** |
-| Manual completion, with "Awaiting Completion" display | **[APPROVED]** |
+| Manual completion with "Awaiting Completion" display | **[APPROVED]** |
 | Organizer reminders after departure | **[FUTURE]** |
 | Manual weather management | **[APPROVED]** |
 | In-app notifications | **[APPROVED]** |
 | Push notifications | **[FUTURE]** |
-| Email notifications (transactional events only) | **[FUTURE]** |
-| Geocoding / places provider | **[TECH DIRECTION]**: evaluation and recommendation required, no commitment yet |
-| Concurrency-safe capacity enforcement (PostgreSQL) | **[TECH DIRECTION]** |
+| Email notifications (transactional only) | **[FUTURE]** |
+| Supabase PostgreSQL as the database | **[TECH DIRECTION]** (proposed; final architecture approval is separate) |
+| Concurrency-safe capacity enforcement | **[TECH DIRECTION]** |
 | Hashed invitation tokens | **[TECH DIRECTION]** |
-| Push and email providers | Deferred until those channels are scheduled |
+| Geocoding / mapping / time-zone provider | Separate research and recommendation deliverable. Not selected. |
+| Push and email providers | Deferred |
 | External weather API integration | **[ENHANCEMENT — REQUIRES APPROVAL]** |
 | Automatic weather-based cancellation | **[ENHANCEMENT — REQUIRES APPROVAL]** |
 
@@ -55,31 +62,28 @@
 ## 2. Personal Ride Calendar
 
 ### 2.1 Requirements **[APPROVED]**
-- R-CAL-1: The initial release uses section-based lists: **This Week**, **Upcoming Rides**, **Past Rides**.
+- R-CAL-1: Section-based lists: **This Week**, **Upcoming Rides**, **Past Rides**.
 - R-CAL-2: Include rides the user **organizes**, and rides where they are **Confirmed**, **Tentative** or **Pending Approval**.
 - R-CAL-3: Pending Approval entries are labeled **"Awaiting Approval."**
-- R-CAL-4: Each entry shows meeting location, destination, date, time, and the user's participation status.
-- R-CAL-5: The calendar updates automatically on join, leave, RSVP change, approval or decline, reschedule, cancellation, and completion.
-- R-CAL-6: The **ride's local time** is the primary time shown. If the user's time zone differs, the user's local time may be shown as secondary information.
-- R-CAL-7: The week boundary **follows the user's locale**.
+- R-CAL-4: Each entry shows meeting location, destination, date, time, and participation status.
+- R-CAL-5: The calendar updates automatically on join, leave, removal, RSVP change, approval or decline, reschedule, cancellation, and completion.
+- R-CAL-6: The **ride's local time** is the primary time shown. If the rider's time zone differs, the rider's local time may be shown as secondary information.
+- R-CAL-7: **Week boundaries are computed in the rider's local time zone**, with the first day of the week following the rider's locale. A ride's departure moment is placed against those boundaries.
 - R-CAL-8: Past rides never appear in This Week or Upcoming Rides.
-- R-CAL-9: **Rides the user left**:
-  - Removed from This Week and Upcoming Rides.
-  - The participation record is kept.
-  - The ride may appear in **Past Rides** as a historical record, where appropriate.
-- R-CAL-10: **Declined join requests** disappear from the rider's active calendar. The request record is kept on the backend for history and audit.
-- R-CAL-11: **Canceled rides** remain visible on calendars, labeled "Canceled," with the cancellation reason.
-- R-CAL-12: If a ride's departure has passed but the organizer hasn't marked it Completed, it appears under **Past Rides** with the secondary label **"Awaiting Completion"** (see §7.6).
+- R-CAL-9: **Rides the user left** are removed from This Week and Upcoming Rides. Once the departure time has passed, they appear in **Past Rides** as a historical record labeled **"Left."** The participation record is kept.
+- R-CAL-10: **Declined join requests** disappear from the active calendar. The request record is kept on the backend for history and audit.
+- R-CAL-11: **Canceled rides** stay visible, labeled "Canceled," with the cancellation reason.
+- R-CAL-12: Rides past departure that haven't been completed appear in **Past Rides** labeled **"Awaiting Completion"** (§7.6).
 
 ### 2.2 Section placement **[APPROVED]**
-- *This Week*: departure is in the future and falls within the current week, as defined by the user's locale.
-- *Upcoming Rides*: departure is in the future and falls after the current week.
+- *This Week*: departure is in the future and within the current week, in the rider's time zone.
+- *Upcoming Rides*: departure is in the future and after the current week.
 - *Past Rides*: departure has passed, or the ride is `Completed`.
 
 ### 2.3 Items needing confirmation
-- **[PROPOSED]** Meaning of "where appropriate" in R-CAL-9: once its departure time has passed, a ride the user left appears in Past Rides labeled **"Left."** A ride the user left that was later canceled also appears, labeled "Canceled." See §12, item 1.
-- **[PROPOSED]** The secondary local time is shown automatically whenever the user's device time zone differs from the ride's. No user setting is needed in the initial release.
-- **[PROPOSED]** Week boundaries are computed in the **user's** time zone, and each ride's departure moment is compared against them. (A ride can fall in a different week for the user than in the ride's own time zone.)
+- **[PROPOSED]** The secondary local time is shown **automatically** whenever the rider's time zone differs from the ride's. No user setting in the initial release. See §12, item P1.
+- **[OPEN]** How a **removed** rider's ride appears on their calendar. For example: removed from active sections, then shown in Past Rides labeled "Removed," or not shown at all. See §12, item N2.
+- **[OPEN]** Whether a rider who left a ride **before it was canceled** sees "Left" or "Canceled" in Past Rides. See §12, item N8.
 
 ### 2.4 Future
 - **[FUTURE]** Month-grid view.
@@ -89,72 +93,87 @@
 ## 3. Nearby Ride Search
 
 ### 3.1 Requirements **[APPROVED]**
-- R-DISC-1: Default the search center to the rider's **selected city**, or their **device location** if they have granted permission.
+- R-DISC-1: Default the search center to the **selected city**, or to **device location** if the rider has granted permission. Location order: device location (with permission) → selected city → ask the rider to choose.
 - R-DISC-2: Match rides by **meeting point**, not destination.
 - R-DISC-3: Radius: **default 40 km, minimum 5 km, maximum 160 km**.
-- R-DISC-4: Users can show distances in **km or miles**. The initial unit comes from the user's locale. The limits are fixed in km and converted for display.
-- R-DISC-5: Results show destination, meeting point, departure time, organizer, available slots, and ride conditions.
-- R-DISC-6: Exclude `Canceled` and `Completed` rides from default results.
-- R-DISC-7: Private rides never appear in discovery.
-- R-DISC-8: Full rides stay visible, labeled **"Full,"** with joining disabled and refused by the server (§4.3).
-- R-DISC-9: List view in the initial release.
-- R-DISC-10: Location order: device location (only with permission) → selected city → ask the user to choose a city.
+- R-DISC-4: Distances in **km or miles**. The initial unit comes from the locale. Limits are fixed in km and converted for display.
+- R-DISC-5: Results show destination, meeting point, departure time, organizer, available slots, and conditions.
+- R-DISC-6: Exclude `Canceled` and `Completed` rides.
+- R-DISC-7: **Exclude rides whose departure time has passed**, even if their stored status is still `Scheduled` or `Weather Review`. (Resolves C1.)
+- R-DISC-8: Private rides never appear in discovery.
+- R-DISC-9: Full rides stay visible, labeled **"Full,"** with joining disabled and refused by the server.
+- R-DISC-10: List view in the initial release.
 
 ### 3.2 Items needing confirmation
-- **[PROPOSED — recommended for approval]** Default results show only rides whose **departure time is still in the future**. This follows from the approved rule that joining is blocked after departure, and from manual completion: without it, rides whose departure has passed but that are still `Scheduled` would show in discovery even though nobody can join them. See §11, concern C1.
-- **[PROPOSED]** Rides in `Weather Review` stay in results with a badge.
-- **[PROPOSED]** Default sort: soonest departure first, with distance as the tie-breaker.
+- **[PROPOSED]** Rides in `Weather Review` stay in results with a badge. See §12, item P2.
+- **[PROPOSED]** Default sort: soonest departure first, with distance as the tie-breaker. See §12, item P3.
 
 ### 3.3 Future
 - **[FUTURE]** Map-based discovery.
 
 ---
 
-## 4. Participant Capacity **[APPROVED]**
+## 4. Participant Capacity & Membership
 
-### 4.1 Seat rules
+### 4.1 Seat rules **[APPROVED]**
 | Participant | Consumes a seat? |
 |---|---|
 | Organizer | Yes (one seat) |
 | Confirmed | Yes |
 | Tentative | No |
 | Pending Approval | No |
-| Canceled | No |
+| Canceled (left, declined, removed) | No |
 
 - **Occupied seats** = organizer + Confirmed participants.
 - **Available slots** = capacity − occupied seats.
-- A ride is **Full** when available slots = 0.
-- Capacity defaults to 10, including the organizer. The minimum is **2** (the organizer plus one rider).
+- **Full** means available slots = 0.
+- Capacity defaults to 10, with a minimum of 2, both including the organizer.
 
-### 4.2 Enforcement
+### 4.2 Enforcement **[APPROVED]**
 - The server enforces capacity.
-- Concurrent joins, confirmations and approvals must never push occupied seats above capacity.
+- Concurrent actions must never push occupied seats above capacity.
 - Every seat-taking action re-checks capacity at the moment it is committed:
   - joining as Confirmed
   - switching Tentative → Confirmed
-  - an organizer approving a request
+  - organizer approval
+  - rejoining
 
-### 4.3 Full rides
-- **Nobody can join a full ride, in any status, including Tentative.** This includes submitting a new join request on a ride that requires approval. The server enforces it.
-- When a ride becomes full, **existing Tentative and Pending Approval entries stay on record**. They are never silently deleted.
-- **When a seat opens:**
-  - Interested riders (current Tentative and Pending Approval participants) are notified.
-  - They may update their RSVP or request:
-    - A Tentative rider can switch to Confirmed (if approval is off), or request confirmation (if approval is on).
-    - A pending request stays with the organizer, who can then approve it.
-  - When approval is enabled, organizer approval is required.
-  - Riders are **never promoted to Confirmed automatically**.
-  - Seats go to whoever successfully confirms, or is approved, first. The server's capacity check (§4.2) settles races. There is no queue or reserved order.
-- **No automated waitlist** in the initial release.
+### 4.3 Full rides **[APPROVED]**
+- **Nobody can join a full ride, including as Tentative**, and nobody can submit a new join request on one. The server enforces this.
+- Existing Tentative and Pending Approval entries stay on record and are never silently deleted.
+- **When a seat opens** (a rider leaves, is removed, downgrades, or declines a reschedule):
+  - Eligible riders are notified: the ride's current Tentative and Pending Approval participants, plus the organizer when pending requests exist.
+  - **The notification does not reserve a seat.**
+  - Riders may update their RSVP or request. Organizer approval is required when approval is enabled.
+  - Nobody is **ever promoted to Confirmed automatically**.
+  - If another rider takes the seat first, the rider sees a clear **"Seat no longer available"** message. (Resolves C2.)
+- No automated waitlist in the initial release.
 
-### 4.4 Lowering capacity
-- Organizers **cannot set capacity below the number of occupied seats**. For example, with 8 occupied seats the minimum allowed capacity is 8. The minimum of 2 also always applies.
-- To go lower, the organizer must first reduce the participant count.
-- Confirmed riders are **never removed automatically** to satisfy a capacity change.
-- The server enforces this check, which shares the concurrency protection in §4.2.
+### 4.4 Lowering capacity **[APPROVED]**
+- Capacity can't be set below occupied seats, or below 2.
+- To go lower, the organizer must first reduce the participant count (for example by removing participants, §4.5). Riders are never removed automatically.
+- The server enforces this, with the same concurrency protection as §4.2.
 
-### 4.5 Items needing confirmation
-- **[OPEN]** How an organizer "resolves the participant count": can they remove a confirmed rider directly, or must they ask riders to leave? If they can remove riders, is a reason required and is the rider notified? See §12, item 2.
+### 4.5 Organizer removal of participants **[APPROVED]**
+- Organizers may **remove Confirmed participants**.
+- A **removal reason is required**.
+- The **affected rider is notified**.
+- The action is **recorded in the ride history** (actor, time, reason).
+- The participation record is **not deleted**. Its status becomes `Canceled`, recorded as a removal.
+- Removal frees the seat, which triggers the seat-available behavior in §4.3.
+- **[OPEN]** Can a removed rider **rejoin** (through a link or by joining a public ride)? Under the current rejoin rules (§5.5), a removed rider could rejoin straight away. See §12, item N1 and contradiction X1.
+- **[OPEN]** Is the removal reason **shown to the removed rider**, or only kept in the ride history? See §12, item N3.
+- **[OPEN]** Can organizers also remove **Tentative** or **Pending Approval** participants with the same rules? (Declining already covers pending requests.) See §12, item N4.
+- **[PROPOSED]** Removal isn't allowed after departure, or on Canceled or Completed rides. See §12, item P4.
+
+### 4.6 Re-requesting after a decline **[APPROVED]**
+- A rider whose join request was declined may submit another request if:
+  - the ride hasn't departed
+  - the ride isn't canceled
+  - normal capacity and approval rules are met
+- Each request and decline stays on record.
+- On a private ride, the new request also needs an invitation link that is still valid (§5).
+- **[OPEN]** Is there a limit or cooldown on repeat requests, to stop an organizer being sent the same request again and again? See §12, item N5.
 
 ---
 
@@ -162,42 +181,54 @@
 
 ### 5.1 Requirements
 - **[APPROVED]** Intended functionality: invitation links **and** direct invitations.
-- **[APPROVED]** Initial release: **secure invitation links**.
+- **[APPROVED]** Initial release: **secure invitation links**, shared by the organizer.
 - **[FUTURE]** Direct invitations.
+- **[FUTURE]** Invitation emails. (Resolves C5.)
 
 ### 5.2 Security rules **[APPROVED]**
-- Private rides never appear in public discovery.
-- Only authorized invited riders can see a private ride's details or join it.
-- Invitation links use secure, unguessable tokens.
+- Private rides never appear in discovery.
+- Only authorized riders can see a private ride's details or join it.
+- Links use secure, unguessable tokens.
 - All access restrictions are enforced on the server.
 
-### 5.3 Invitation link lifecycle **[APPROVED]**
-- Links are **never permanently valid by default**.
-- **Default expiration: 7 days** after the link is created.
-- Organizers can **configure the expiration**.
-- Organizers can **configure a maximum number of uses**.
+### 5.3 Link lifecycle **[APPROVED]**
+- Links are never permanently valid by default.
+- **Configured expiry:** 7 days after creation by default. The organizer can change it, up to a **maximum of 30 days** **[APPROVED — PROVISIONAL VALUE]**.
+- **Effective expiry = whichever comes first: the configured expiry or the ride's departure time.** A link always stops working at departure. (Resolves C7.)
+- **Maximum uses:** configurable by the organizer. The default is **50 successful joins** when the organizer sets none **[APPROVED — PROVISIONAL VALUE]**.
+- **Definition of a use:** one **successful join**.
+  - Opening a link doesn't count as a use.
+  - An unsuccessful join attempt (full ride, departed, invalid link, and so on) doesn't count.
+  - **Rejoining through the same link counts as another use.**
 - Organizers can **revoke** links.
 - **Expired, revoked and used-up links are rejected by the server.**
-- **Revoking a link does not remove riders who already joined** through it.
+- **Revoking a link doesn't remove participants** who already joined.
 
-### 5.4 Rejoining **[APPROVED]**
-- A rider who left may rejoin through the **same invitation link**, as long as it is still valid (not revoked, expired or used up).
-- All normal joining rules apply again:
-  - capacity check (§4)
-  - organizer approval, if enabled
+### 5.4 Who keeps access **[APPROVED]**
+- **Existing participants** keep access through their normal ride membership, whatever happens to the link they used.
+- A person who **only opened** a link and never joined **loses all access** once the link expires, is revoked, or is used up.
+
+### 5.5 Rejoining **[APPROVED]**
+- A rider who left can rejoin through the same link if it is still valid. The rejoin uses up one use of the link.
+- Normal rules apply:
+  - capacity check
+  - approval, if enabled
   - no duplicate active participation
   - joining blocked after departure
   - all checks enforced on the server
-- Rejoining a **public** ride follows the same rules, without needing a link.
+- Rejoining a public ride follows the same rules, without a link.
 
-### 5.5 Items needing confirmation
-- **[OPEN]** Default for **maximum uses** when the organizer sets none. Suggested: no limit, within the expiry window. See §12, item 3.
-- **[OPEN]** What counts as a **use**. Suggested: one successful join. Opening the link without joining, or a failed join (for example because the ride is full), doesn't count. Does a rider's **rejoin** count as another use? See §12, item 4.
-- **[OPEN]** Expiry bounds: should a link stop working at departure even if its configured expiry is later? Is there a maximum configurable expiry? See §12, item 5.
-- **[OPEN]** If a rider opened a valid link but didn't join, do they keep **view access** to the ride after the link expires or is revoked? See §12, item 6.
-- **[PROPOSED]** The rider must be signed in before a link grants access.
-- **[PROPOSED]** The organizer can create a replacement link at any time, and can have more than one active link per ride.
-- See §11, concern C3, for how storing token hashes limits redisplaying links.
+### 5.6 Link retrieval and replacement **[APPROVED]** (resolves C3)
+- Only **token hashes** are stored. Raw tokens are never stored just so links can be retrieved later.
+- The organizer can **copy the generated link when it is created**. Lobby can't show it again later.
+- If a link is lost, the organizer **creates a replacement link**.
+
+### 5.7 Items needing confirmation
+- **[OPEN]** Definition of a "successful join" on a ride that **requires approval**: is the use counted when the request is **submitted**, or when it is **approved**? See §12, item N6 and edge case X3.
+- **[OPEN]** If a ride is **rescheduled**, is the effective expiry recalculated from the new departure time? (A later departure could make an earlier-expired link valid again.) See §12, item N7 and edge case X4.
+- **[OPEN]** **Pending requesters, and riders who left, on private rides:** what can they see once the link has expired? (Pending requesters are members waiting for a decision. Riders who left have a "Left" history entry.) See §12, item N9 and edge case X5.
+- **[PROPOSED]** The rider must be signed in before a link grants access. See §12, item P5.
+- **[PROPOSED]** A ride can have more than one active link at a time. (Replacement links are approved; having several at once is not yet.) See §12, item P6.
 
 ---
 
@@ -207,7 +238,7 @@
 |---|---|
 | Title | Required |
 | Description | Required |
-| Meeting point | Geocoded location. Discovery searches on it, and it sets the ride's time zone. |
+| Meeting point | Geocoded. Discovery searches on it, and it sets the ride's time zone. |
 | Destination | Location |
 | Date | In the ride's local time zone |
 | Meeting time | At or before the departure time |
@@ -217,11 +248,11 @@
 | Visibility | `Public` or `Private` |
 | Participant approval | Optional toggle |
 
-- **[APPROVED]** The ride's time zone comes from the meeting point's location.
 - **[APPROVED]** The organizer is added automatically and takes one seat.
-- **[APPROVED]** With approval **on**: joining creates a `Pending Approval` request, which takes no seat. Approval is subject to capacity.
-- **[APPROVED]** With approval **off**: joining makes the rider `Confirmed` (if a seat is free) or `Tentative` (not allowed on a full ride, §4.3).
-- **[PROPOSED]** Participant approval is off by default.
+- **[APPROVED]** With approval on: joining creates a `Pending Approval` request, which takes no seat. Approval is subject to capacity.
+- **[APPROVED]** With approval off: joining makes the rider `Confirmed` (if a seat is free) or `Tentative`. Neither is possible on a full ride.
+- **[PROPOSED]** Participant approval is off by default. See §12, item P7.
+- **[OPEN]** Is there a **maximum capacity**? This matters because the default link limit of 50 joins would be lower than the capacity of very large rides. See §12, item N10 and edge case X6.
 
 ---
 
@@ -234,7 +265,7 @@ Ride status and participant status are stored and managed separately.
 | Status | Meaning |
 |---|---|
 | `Scheduled` | Active. Stays `Scheduled` after departure until the organizer marks it completed. |
-| `Weather Review` | The organizer flagged a possible weather disruption. Active. |
+| `Weather Review` | Possible weather disruption flagged by the organizer. Active. |
 | `Canceled` | Canceled by the organizer. A reason is required. Final. |
 | `Completed` | Marked completed by the organizer. Final. |
 
@@ -250,41 +281,37 @@ Completed       → (final)
 |---|---|---|
 | `Confirmed` | Attending | Yes |
 | `Tentative` | Might attend | No |
-| `Pending Approval` | Waiting for the organizer's approval | No |
-| `Canceled` | Left, declined, or removed. The record is kept for history and audit. | No |
+| `Pending Approval` | Waiting for the organizer's decision | No |
+| `Canceled` | Left, declined, or removed. The record and reason are kept. | No |
+
+The ride history records **how** a participant ended up as `Canceled` (left / declined / removed / declined the new schedule), so the calendar labels and the audit trail stay accurate.
 
 ### 7.4 Joining window and cancellation **[APPROVED]**
-- **Joining is blocked after the ride's departure time.** The server enforces it.
-- Canceling requires a **reason**, which is stored and shown to participants.
-- Once a ride is canceled, the server rejects every new join and every RSVP change.
-- A canceled ride stays visible on calendars with its reason.
-- Active participants are notified.
-- Participant statuses are not overwritten when a ride is canceled.
+- **Joining is blocked after departure.** The server enforces it.
+- Canceling requires a reason. Afterwards the server rejects joins, re-requests and RSVP changes. The ride stays visible on calendars with its reason, and active participants are notified.
+- Invitation links on canceled or departed rides are rejected (§5.3).
 
 ### 7.5 Rescheduling **[APPROVED]**
-- The organizer can change the date, meeting time and/or departure time.
-- Every active participant is notified and asked to review and reconfirm.
-- **Existing Confirmed reservations stay in place** until each participant explicitly changes their RSVP. Riders are never removed automatically, and seats are never released automatically.
-- **The organizer can see reconfirmation status** for each participant:
-  - **Reconfirmed**
-  - **Awaiting reconfirmation** (still holds the seat if Confirmed)
-  - **Declined the new schedule**
-- **[PROPOSED]** "Declined the new schedule" changes the participant's status to `Canceled`, which frees the seat.
-- **[PROPOSED]** Reconfirmation is tracked for Confirmed and Tentative participants. Pending requests are notified but not tracked.
-- **[PROPOSED]** Each new reschedule resets everyone's reconfirmation status to "Awaiting reconfirmation."
-- **[PROPOSED]** A new departure time must be in the future. Canceled and Completed rides can't be rescheduled.
-- **[PROPOSED]** Rescheduling doesn't change a `Weather Review` status. The organizer sets the ride back to `Scheduled` explicitly.
+- The organizer can change the date and times. Active participants are notified and asked to reconfirm.
+- **Existing Confirmed reservations stay in place** until each participant explicitly changes their RSVP. Riders are never removed automatically.
+- **The organizer can see** each participant's reconfirmation status: **Reconfirmed**, **Awaiting reconfirmation**, or **Declined the new schedule**.
+- **[PROPOSED]** Declining the new schedule changes the participant's status to `Canceled`, which frees the seat. See §12, item P8.
+- **[PROPOSED]** Reconfirmation is tracked for Confirmed and Tentative participants. Pending requests are notified only. See §12, item P9.
+- **[PROPOSED]** Each new reschedule resets everyone's reconfirmation status to "Awaiting." See §12, item P10.
+- **[PROPOSED]** A new departure time must be in the future. Canceled and Completed rides can't be rescheduled. See §12, item P11.
+- **[PROPOSED]** Rescheduling doesn't change a `Weather Review` status. See §12, item P12.
 - **[FUTURE]** Reconfirmation deadlines.
 
 ### 7.6 Completion **[APPROVED]**
-- Only the **organizer** can mark a ride `Completed`. Rides are **never marked Completed automatically**.
-- If a ride's departure has passed without completion:
-  - its stored status stays **`Scheduled`** (or `Weather Review`)
-  - it shows under **Past Rides** with the secondary label **"Awaiting Completion"**
-  - the organizer can mark it Completed manually
-- "Awaiting Completion" is a **display label only**, not a stored ride status.
-- **[PROPOSED]** "Mark as completed" becomes available only after the departure time.
-- **[FUTURE]** Optional organizer reminders after departure.
+- Only the organizer can mark a ride `Completed`. Rides are never completed automatically.
+- If departure has passed without completion:
+  - the stored status **stays `Scheduled`** (or `Weather Review`)
+  - the ride shows in **Past Rides** labeled **"Awaiting Completion"**
+  - the ride is excluded from discovery (R-DISC-7)
+  - the organizer can mark it Completed
+- "Awaiting Completion" is a display label only, not a stored status.
+- **[PROPOSED]** "Mark as completed" becomes available only after departure. See §12, item P13.
+- **[FUTURE]** Organizer reminders after departure.
 
 ---
 
@@ -293,45 +320,43 @@ Completed       → (final)
 ### 8.1 Channels
 1. **[APPROVED]** In-app notifications: the core release.
 2. **[FUTURE]** Push notifications.
-3. **[FUTURE]** Email, **outside the initial release**.
+3. **[FUTURE]** Email, outside the initial release.
 
 ### 8.2 Architecture **[APPROVED / TECH DIRECTION]**
-- Notifications are generated once per event and sent through pluggable delivery channels. Push, email or other channels can be added later without changing how events are produced.
+Events are generated once and sent through pluggable delivery channels, so new channels can be added without changing how events are produced.
 
 ### 8.3 Core in-app events **[APPROVED]**
 | Event | Recipients |
 |---|---|
 | Rider joins / leaves / changes RSVP | Organizer |
-| Join request submitted | Organizer |
+| Join request submitted (including re-requests) | Organizer |
 | Join request approved / declined | Requesting rider |
-| Seat became available on a full ride | Tentative and Pending Approval participants, plus the organizer when pending requests exist |
+| Participant removed (with reason, subject to item N3) | Removed rider |
+| Seat became available (no reservation) | Tentative and Pending Approval participants, plus the organizer when pending requests exist |
 | Ride enters `Weather Review` / weather disruption notice | All active participants |
 | Ride rescheduled (with reconfirmation request) | All active participants |
-| Participant reconfirms or declines the new schedule | Organizer |
+| Participant reconfirms / declines the new schedule | Organizer |
 | Ride canceled (with reason) | All active participants |
 
 "Active participants" means the organizer and everyone in `Confirmed`, `Tentative` or `Pending Approval`.
 
 ### 8.4 Future email scope **[FUTURE]**
-When email is implemented, it covers only important transactional events:
 - Ride cancellation
 - Ride rescheduling
 - Join request approval or rejection
-- Private ride invitations
+- Private ride invitations (only together with direct invitations)
 
-Routine RSVP changes and other minor activity stay in-app unless future requirements justify email. See §11, concern C5, about invitation emails.
+Routine activity stays in-app.
 
 ---
 
 ## 9. Weather-Based Ride Management
 
 ### 9.1 Core milestone (manual) **[APPROVED]**
-- The weather policy (`Dry Only` / `Rain or Shine`) is shown on ride detail, discovery results, and calendar entries.
-- Organizers can notify participants about possible weather disruptions.
-- Organizers can put rides into `Weather Review`.
-- Organizers can cancel (a reason is required) or reschedule rides.
-- Affected participants are notified.
-- **No automatic weather-based cancellation** in the core milestone.
+- The weather policy is shown on ride detail, discovery results and calendar entries.
+- Organizers can send disruption notices, use `Weather Review`, and cancel (with a reason) or reschedule.
+- Participants are notified.
+- **No automatic weather-based cancellation.**
 
 ### 9.2 External weather integration and automatic cancellation **[ENHANCEMENT — REQUIRES APPROVAL]**
 - No weather provider is selected or integrated.
@@ -347,129 +372,158 @@ Routine RSVP changes and other minor activity stay in-app unless future requirem
 
 ## 10. Technical direction **[TECH DIRECTION]**
 
-These are approved architectural recommendations. **Nothing here is built, configured or bought until development is approved.**
+These are directions only. **No code, schema, migration, dependency, infrastructure or configuration has been created or is authorized.** Final architecture approval is a separate step.
 
-### 10.1 Geocoding and places provider
-- **Candidates:** Google Maps Platform, Mapbox, and OpenStreetMap-based options (for example, hosted Nominatim/Photon-compatible services, or commercial OSM-based providers).
-- **Criteria:** pricing at expected and scaled volume, geographic coverage of launch regions, licensing (including the terms for storing and caching results), reliability and service levels, scalability and rate limits.
-- **Deliverable:** a comparison with **one preferred recommendation and its cost implications**, submitted for review. **No provider is committed to until it is reviewed.**
-- **Status:** evaluation not yet carried out. Pricing must come from current vendor sources at evaluation time.
-- **Related need:** the provider (or a separate method) must also look up the **IANA time zone** from the meeting point's coordinates (§6). See concern C4.
+### 10.1 Database
+- **Supabase PostgreSQL** is the proposed database direction. (Resolves C6.)
+- Final architecture approval is separate. No Supabase project, database plan or configuration is assumed to exist.
 
-### 10.2 Concurrency-safe joining
-- Enforce capacity with **PostgreSQL transactions** or a purpose-built **database function**, so the capacity check and the seat change happen as one indivisible operation.
-- All capacity validation is server-side. Race conditions and overbooking must be impossible.
-- This protection covers: join as Confirmed, Tentative → Confirmed, organizer approval, rejoin, and capacity reduction (§4.4).
+### 10.2 Geocoding, mapping and time-zone provider (separate deliverable)
+- **Compare:** Google Maps Platform, Mapbox, and suitable OpenStreetMap-based options.
+- **Criteria:**
+  - **current** pricing at expected and scaled volume
+  - geographic coverage of the launch regions
+  - licensing, including the terms for storing and caching results
+  - reliability and service levels
+  - scalability and rate limits
+  - **coordinates-to-time-zone lookup** (resolves C4)
+- **Deliverable:** one preferred recommendation, with its cost implications, submitted for review.
+- **No provider is selected or integrated** until it is reviewed.
+- **Status:** research not yet started.
+
+### 10.3 Concurrency-safe joining
+- Enforce capacity, link usage limits and capacity reductions with PostgreSQL transactions or a purpose-built database function, so each check and its change happen as one indivisible operation.
+- All validation is server-side.
 - **Testing plan must include:**
   - concurrent joins competing for the last seat
   - concurrent approvals
   - a join racing a capacity reduction
-  - several notified riders confirming after a seat opens
+  - a join racing a participant removal
+  - several seat-available riders confirming at once
+  - concurrent redemptions of a link close to its usage limit
   - duplicate rejoin attempts
-- **Assumption:** PostgreSQL is the base plan's database (see concern C6).
 
-### 10.3 Invitation tokens
-- Tokens are generated from a cryptographically secure random source.
-- **Only token hashes are stored**, never raw tokens.
-- Expiry, usage limits and revocation are enforced on the server when a link is redeemed. The usage count goes up as part of the same transaction as the join, so concurrent redemptions can't exceed the limit.
-- Private ride details are never returned without authorization.
+### 10.4 Invitation tokens
+- Generated from a cryptographically secure random source. **Only hashes are stored.**
+- When a link is redeemed, the server enforces the effective expiry (configured expiry or departure, whichever is first), the usage limit, and revocation.
+- The usage count goes up in the same transaction as the successful join.
+- Private ride data is never returned without authorization.
 
-### 10.4 Push and email providers
-- Selection is deferred until those channels are scheduled. The notification design stays extensible (§8.2).
-
-### 10.5 Weather provider
-- Not selected or integrated. It stays part of the enhancement in §9.2.
+### 10.5 Deferred providers
+- Push, email and weather providers are not selected. The notification design stays extensible.
 
 ### 10.6 Data model sketch **[PROPOSED]**
-For discussion only. This is not an approved schema, and **no schema or migration work is authorized**.
-
+For discussion only. This is not an approved schema.
 - **Ride**: organizer, title, description, meeting point, destination, IANA time zone, meeting/departure time (UTC), capacity, conditions, visibility, requires_approval, status, cancel reason/time, completed_at.
-- **RideParticipant**: ride, user, status, is_organizer, joined/updated times, reconfirmation status. Records are kept on leave or decline, with **at most one active participation per rider per ride**.
-- **RideStatusEvent** (audit): status changes, reasons, reschedules (old and new times), actor.
-- **RideInvitationLink**: ride, token hash, created by, expires_at (default 7 days), max_uses, use_count, revoked_at.
+- **RideParticipant**: ride, user, status, end reason (left / declined / removed / declined new schedule), removal reason, reconfirmation status, timestamps. **At most one active participation per rider per ride.** Records are never deleted.
+- **RideStatusEvent / RideHistory**: status changes, reschedules, removals, approvals and declines, with actor, time and reason.
+- **RideInvitationLink**: ride, token hash, created by, configured expiry (default 7 days, maximum 30), max uses (default 50), use count, revoked_at.
 - **Notification**: recipient, event type, ride, payload, read_at, with delivery tracked per channel.
 - **User preferences**: distance unit, locale.
 
 ---
 
-## 11. Conflicts and technical concerns
+## 11. Conflicts, contradictions and edge cases
 
-| # | Concern | Impact | Suggested resolution |
+### 11.1 Earlier concerns, resolved in Revision 4
+| # | Resolution |
+|---|---|
+| C1 | Discovery excludes rides whose departure has passed (R-DISC-7). |
+| C2 | Seat-available notifications don't reserve a seat. A "Seat no longer available" message is shown (§4.3). |
+| C3 | Hashed tokens are kept. The link can be copied when it is created, and lost links are replaced (§5.6). |
+| C4 | The time-zone lookup is included in the provider evaluation (§10.2). |
+| C5 | Invitation emails are out of the initial release (§5.1). |
+| C6 | Supabase PostgreSQL is the proposed direction. Final architecture approval is separate (§10.1). |
+| C7 | Links stop at departure, with a 30-day maximum expiry (§5.3). |
+| C8 | Week boundaries are computed in the rider's time zone, and the ride's local time stays primary (R-CAL-6, R-CAL-7). |
+
+### 11.2 New contradictions and edge cases from Revision 4 decisions
+| # | Issue | Why it matters | Suggested handling |
 |---|---|---|---|
-| C1 | Manual completion keeps past rides `Scheduled`, and R-DISC-6 excludes only Canceled and Completed rides. Past rides that haven't been completed would show up in discovery even though nobody can join them. | Confusing results | Approve the §3.2 rule: discovery shows only future departures. |
-| C2 | When a seat opens, several riders are notified at once and only one can take it. | Riders who lose the race are disappointed. Possible support load. | Approved as first-come; the server settles races (§4.3). Show a clear "seat no longer available" message. A queue would be the future waitlist feature. |
-| C3 | Storing only token **hashes** means a link can't be shown again after it is created. | Organizers who lose a link can't copy it again. | Show the full link once at creation and let organizers create replacement links (§5.5). Other options, such as reversible encryption, weaken the "hashes only" rule and would need approval. |
-| C4 | Taking the time zone from the meeting point needs a coordinates-to-time-zone lookup. | Extra dependency | Cover it in the geocoding evaluation (§10.1), or use an offline time-zone boundary dataset. Decide during evaluation. |
-| C5 | Future "private ride invitation" emails only make sense for **direct** invitations (where the system knows who the recipient is). Organizers share invitation links themselves. | Email scope depends on another future feature | Tie invitation emails to direct invitations when both are scheduled. |
-| C6 | The PostgreSQL direction assumes the base plan uses PostgreSQL. The base plan isn't in the repository. | Possible mismatch | Confirm the database when the base plan is merged. |
-| C7 | A 7-day default link expiry and departure time are independent of each other. A link can outlive the ride, or expire long before it. | Links that still work after a ride is over, or organizers having to make new links | Decide whether links also expire at departure (§12, item 5). Joining is already blocked after departure in any case. |
-| C8 | Users and rides can be in different time zones, which affects "This Week" and the "Left" / "Awaiting Completion" labels. | Edge-case display differences | Approve the §2.3 rule: weeks are computed in the user's time zone. |
+| X1 | **Removal vs rejoin.** A removed rider counts as "a rider who left," so the rejoin rules (§5.5) would let them rejoin straight away, through a still-valid link or on a public ride. | Makes removal ineffective | Decide whether removed riders are blocked from rejoining, or need organizer approval to rejoin (item N1). |
+| X2 | **Removal and calendar labels.** Only "Left" is defined for Past Rides. | Removed riders could wrongly see "Left" | Define how a removed ride appears (item N2). |
+| X3 | **Counting uses on approval-required rides.** "A successful join" is unclear when joining creates a pending request. | Counting on submission lets declined requests use up the link; counting on approval allows more open requests than the remaining uses | Decide when a use is counted (item N6). Suggested: count on approval. |
+| X4 | **Reschedule vs effective expiry.** Effective expiry depends on departure. Moving departure later could revive an expired link. Moving it earlier cuts the link short. | Links unexpectedly working again, or stopping | Suggested: recalculate effective expiry from the current departure time, but never revive a link whose configured expiry has already passed (item N7). |
+| X5 | **Private access after a link ends.** Opened-only visitors lose access (approved). It is not yet defined for pending requesters or for riders who left (who have a "Left" history entry). | A history entry could show private details to someone who is no longer a member | Suggested: pending requesters keep access while their request is open; riders who left see only the summary details in their history entry (item N9). |
+| X6 | **Link limit vs capacity.** There is no maximum capacity, so the default of 50 joins could be lower than a large ride's capacity. Rejoins also use up the limit. | Organizers of large rides could run out of joins unexpectedly | Decide on a maximum capacity, or set the default link limit relative to capacity (item N10). |
+| X7 | **Repeat requests after a decline.** There is no limit. | Organizers could be sent the same request again and again | Consider a cooldown or a per-ride limit (item N5). |
+| X8 | **Seat-available races.** Seat-available notifications, re-requests and rejoins can all compete for the same seat. | The "Seat no longer available" path will be common | Covered by §4.3 and the §10.3 tests. No product change needed. |
+| X9 | **Week boundary vs displayed time.** Weeks are computed in the rider's time zone, but times are shown in the ride's time zone. A ride can show a ride-local date that seems to belong to another week. | Occasional confusion | Accepted under C8. The secondary rider-local time (P1) reduces it. |
 
 ---
 
-## 12. Remaining decisions
+## 12. Remaining unresolved decisions
 
-### 12.1 Product decisions needing your input
-1. **Past Rides for rides the user left:** confirm the §2.3 definition of "where appropriate."
-2. **Reducing participants:** can organizers remove confirmed riders directly? If so, is a reason required and is the rider notified?
-3. **Default max uses** when the organizer sets none.
-4. **Counting uses:** does a use mean a successful join, and does a rejoin count as another use?
-5. **Link expiry bounds:** should links also stop working at departure? Is there a maximum configurable expiry?
-6. **View access** for riders who opened a link but didn't join, once the link expires or is revoked.
-7. **Can a declined rider request again**, on rides that require approval?
-8. **Confirm or adjust the remaining [PROPOSED] items:**
-   - §2.3: "Left" label, automatic secondary time, week computed in the user's time zone
-   - §3.2: future-only discovery, Weather Review badge, sort order
-   - §5.5: sign-in required, multiple and replacement links
-   - §6: approval off by default
-   - §7.5: declining the new schedule = Canceled, which participants are tracked, reset on each reschedule, reschedule constraints, Weather Review left unchanged by a reschedule
-   - §7.6: "mark completed" only after departure
+### 12.1 New product decisions (raised by Revision 4)
+- **N1** Can a **removed** rider rejoin? Options: blocked entirely; allowed only with organizer approval; allowed under the normal rules.
+- **N2** How a removed rider's ride appears on their calendar ("Removed" in Past Rides, or hidden).
+- **N3** Is the removal reason **shown to the removed rider**, or only kept in the history?
+- **N4** Can organizers remove **Tentative** or **Pending** participants with the same rules?
+- **N5** Is there a limit or cooldown on repeat requests after a decline?
+- **N6** On approval-required rides, is a link use counted on **submission** or on **approval**?
+- **N7** Does a reschedule **recalculate** effective link expiry, and can that ever revive an expired link?
+- **N8** For a rider who left a ride that was later canceled, does Past Rides show "Left" or "Canceled"?
+- **N9** Access to a private ride's details for pending requesters and riders who left, after the link has ended.
+- **N10** Maximum ride capacity, and how it relates to the default link limit of 50.
+- **N11** Final confirmation of the provisional values: **50** default joins per link, and a **30-day** maximum link expiry.
 
-### 12.2 Unresolved technical decisions
-- The geocoding/places provider evaluation and recommendation (§10.1), including the time-zone lookup (C4).
-- Confirming PostgreSQL as the base database (C6).
+### 12.2 Earlier [PROPOSED] items still awaiting a decision (not assumed approved)
+- **P1** The secondary rider-local time is shown automatically, with no user setting (§2.3).
+- **P2** Weather Review badge in discovery (§3.2).
+- **P3** Discovery sort: soonest departure, then distance (§3.2).
+- **P4** Removal not allowed after departure, or on Canceled or Completed rides (§4.5).
+- **P5** Sign-in required before a link grants access (§5.7).
+- **P6** More than one active link per ride at a time (§5.7).
+- **P7** Participant approval off by default (§6).
+- **P8** Declining the new schedule = `Canceled`, which frees the seat (§7.5).
+- **P9** Reconfirmation tracked for Confirmed and Tentative participants only (§7.5).
+- **P10** Reconfirmation status resets on each reschedule (§7.5).
+- **P11** Reschedule constraints: future departure only; not allowed on Canceled or Completed rides (§7.5).
+- **P12** Rescheduling doesn't change a Weather Review status (§7.5).
+- **P13** "Mark as completed" available only after departure (§7.6).
+
+### 12.3 Unresolved technical decisions
+- The geocoding, mapping and time-zone provider research and recommendation (§10.2).
+- Final architecture approval, including confirming the Supabase PostgreSQL direction (§10.1).
 - Push and email providers, when those channels are scheduled.
 - The weather provider and thresholds, only if §9.2 is approved.
 
-### 12.3 Resolved decisions
-**Revision 2:**
-- Calendar: Pending Approval display, week boundary, list format, time-zone display.
-- Discovery: radius, units, Full-ride visibility.
-- Seat rules.
-- Private access approach.
-- Preserving reservations on reschedule.
-- Organizer-controlled completion.
-- Channel priority.
-- Weather scope.
-
-**Revision 3:**
-1. Left rides: removed from active sections, history kept, may appear in Past Rides.
-2. Declined requests: removed from the active calendar, record kept for audit.
-3. Full rides: Tentative/Pending entries are kept, riders are notified when a seat opens, no automatic promotion, no automated waitlist.
-4. Nobody can join a full ride, including as Tentative. Enforced by the server. No silent deletion.
-5. Capacity can't be lowered below occupied seats. Riders are never removed automatically.
-6. Invitation links: 7-day default expiry, configurable expiry and maximum uses, revocation, rejected by the server when invalid. Never permanent by default.
-7. Rejoining through a still-valid link, with all normal join rules applied.
-8. Organizers can see reconfirmation status (reconfirmed / awaiting / declined).
-9. Past rides that haven't been completed stay `Scheduled` and show under Past Rides as "Awaiting Completion." Never completed automatically.
-10. Email scope, once email is built: cancellation, rescheduling, approval decisions, private invitations.
-11. Approved: canceled rides stay visible with their reason; joining blocked after departure; time zone from the meeting point; minimum capacity 2; revoking a link doesn't remove riders who joined.
-12. Technical direction: provider evaluation, PostgreSQL concurrency, hashed tokens, deferred push/email providers, no weather provider.
+### 12.4 Resolved decisions
+- **Revision 2:**
+  - Calendar: Pending display, week boundary, format, time display.
+  - Discovery: radius and units, Full-ride visibility.
+  - Seat rules, private access approach, preserving reservations on reschedule, organizer-controlled completion, channel priority, weather scope.
+- **Revision 3:**
+  - Calendar: left rides removed from active sections; declined requests hidden with the record kept.
+  - Full rides: Tentative/Pending entries kept, no automatic promotion, nobody can join a full ride.
+  - Capacity can't be lowered below occupied seats.
+  - Link expiry (7-day default), maximum uses, revocation; rejoining through a valid link.
+  - Reconfirmation visibility; "Awaiting Completion"; email scope.
+  - Five proposed rules approved: canceled rides visible, joining blocked after departure, time zone from the meeting point, minimum capacity 2, revocation keeps riders who joined.
+  - Technical direction.
+- **Revision 4:**
+  - "Left" label in Past Rides.
+  - Organizer removal: reason required, rider notified, recorded in history, no deletion.
+  - Invitation links: default of 50 successful joins (provisional), configurable; a use = a successful join, with rejoins counting.
+  - Link stops at departure; 30-day maximum expiry (provisional).
+  - Opened-only visitors lose access when the link ends; members keep access.
+  - Re-requesting after a decline allowed.
+  - C1–C8 resolved (§11.1).
 
 ---
 
 ## 13. Acceptance criteria (Core Ride Lobby milestone)
 
-These cover **[APPROVED]** requirements only.
+These cover **[APPROVED]** requirements only. Provisional values are shown in *italics*.
 
 **Calendar**
-- [ ] The calendar shows This Week / Upcoming Rides / Past Rides lists, with the week boundary following the user's locale.
-- [ ] Rides the user organizes, or is Confirmed, Tentative or Pending Approval on, appear. Pending rides are labeled "Awaiting Approval."
-- [ ] Ride times show in the ride's local time, with the user's local time optionally shown when it differs.
-- [ ] A ride whose departure has passed never appears in This Week or Upcoming Rides.
-- [ ] Rides the user left are removed from This Week and Upcoming, the participation history is kept, and they can appear in Past Rides.
-- [ ] Declined requests disappear from the active calendar, and the request record is kept on the backend.
-- [ ] Canceled rides stay visible, with their cancellation reason.
+- [ ] The calendar shows This Week / Upcoming Rides / Past Rides lists. Week boundaries are computed in the rider's time zone, with the first day following the rider's locale.
+- [ ] Rides the rider organizes, or is Confirmed, Tentative or Pending on, appear. Pending rides are labeled "Awaiting Approval."
+- [ ] Ride-local time is primary, with the rider's local time optionally shown as secondary.
+- [ ] A ride whose departure has passed never appears in This Week or Upcoming.
+- [ ] Rides the rider left leave the active sections and appear in Past Rides labeled "Left" after departure. The record is kept.
+- [ ] Declined requests disappear from the active calendar, and the record is kept on the backend.
+- [ ] Canceled rides stay visible with their reason.
 - [ ] Rides past departure that haven't been completed appear in Past Rides labeled "Awaiting Completion," with the stored status unchanged.
 - [ ] The calendar updates on every event in R-CAL-5 without a manual refresh.
 
@@ -477,35 +531,35 @@ These cover **[APPROVED]** requirements only.
 - [ ] Discovery centers on device location (with permission) or the selected city, and matches on meeting point.
 - [ ] Radius defaults to 40 km, adjustable from 5 to 160 km. Users can choose km or miles, with the starting unit from their locale.
 - [ ] Results show destination, meeting point, departure time, organizer, available slots and conditions.
-- [ ] Canceled, Completed and private rides never appear.
+- [ ] Canceled, Completed, private, and past-departure rides never appear, whatever their stored status.
 - [ ] Full rides appear labeled "Full," with joining disabled and refused by the server.
 
-**Capacity**
-- [ ] Available slots = capacity − (organizer + Confirmed).
-- [ ] Capacity defaults to 10 and can't be set below 2.
-- [ ] The server refuses every join on a full ride, including Tentative joins and new approval requests.
-- [ ] Existing Tentative and Pending entries are kept when a ride becomes full.
-- [ ] When a seat opens, Tentative and Pending riders (and the organizer, where relevant) get an in-app notification. No rider is promoted automatically. Approval is still required when enabled.
-- [ ] Capacity can't be lowered below occupied seats, and no Confirmed rider is removed automatically.
-- [ ] Concurrent joins, confirmations, approvals, rejoins and capacity changes never exceed capacity (verified by the concurrency tests in §10.2).
+**Capacity and membership**
+- [ ] Available slots = capacity − (organizer + Confirmed). Capacity defaults to 10, with a minimum of 2.
+- [ ] The server refuses every join and new request on a full ride, including Tentative. Existing Tentative and Pending entries are kept.
+- [ ] When a seat opens, eligible riders get an in-app notification. No seat is reserved, and no one is promoted automatically. Approval applies when enabled. Losing a race shows "Seat no longer available."
+- [ ] Capacity can't be lowered below occupied seats, and no rider is removed automatically.
+- [ ] Organizers can remove Confirmed participants only with a reason. The rider is notified, the action is recorded in the ride history, and the record is kept, not deleted.
+- [ ] A declined rider can request again if the ride hasn't departed or been canceled, and capacity and approval rules allow it.
+- [ ] Concurrent joins, approvals, rejoins, removals, capacity changes and link redemptions never exceed capacity or usage limits (verified by the §10.3 tests).
 
 **Private rides and invitation links**
-- [ ] Private rides never appear in discovery. Only authorized invitees can view or join them, enforced by the server.
-- [ ] Links use cryptographically secure tokens, and only their hashes are stored.
-- [ ] Links expire 7 days after creation by default. Organizers can set the expiry and maximum uses, and can revoke links.
-- [ ] Expired, revoked and used-up links are refused by the server. Concurrent redemptions never exceed the usage limit.
-- [ ] Revoking a link doesn't remove riders who already joined.
+- [ ] Private rides never appear in discovery. Only authorized riders can view or join them, enforced by the server.
+- [ ] Tokens are cryptographically secure and only their hashes are stored. The link can be copied when created, and organizers can create replacement links.
+- [ ] Configured expiry defaults to 7 days and is configurable up to *30 days*. Effective expiry is whichever comes first: the configured expiry or departure.
+- [ ] Maximum uses is configurable, defaulting to *50* successful joins. Opening a link or a failed join attempt doesn't use it up. Rejoins do.
+- [ ] The server refuses expired, revoked, used-up and post-departure links.
+- [ ] Revoking a link doesn't remove riders who already joined. Opened-only visitors lose access when the link ends. Members keep access.
 - [ ] A rider who left can rejoin through a valid link, subject to capacity, approval, the joining window and the no-duplicate rule.
 
 **Ride creation**
 - [ ] Every required field is enforced. The time zone comes from the meeting point. Capacity defaults to 10, with a minimum of 2. Visibility and optional approval are supported.
 
 **Status, rescheduling and completion**
-- [ ] Ride and participant statuses are independent and follow the transitions in §7.2.
+- [ ] Ride and participant statuses are independent and follow §7.2. The record of how a participant became Canceled (left, declined, removed) is kept.
 - [ ] The server blocks joining after departure.
-- [ ] Cancellation requires a reason, notifies active participants, and blocks further joins and RSVP changes.
-- [ ] Rescheduling notifies active participants and asks them to reconfirm. Confirmed reservations are kept until riders change them.
-- [ ] Organizers can see which participants have reconfirmed, are awaiting reconfirmation, or declined.
+- [ ] Cancellation requires a reason, notifies active participants, and blocks further joins, re-requests and RSVP changes.
+- [ ] Rescheduling notifies active participants and asks them to reconfirm. Confirmed reservations are kept until riders change them. Organizers can see who reconfirmed, who is awaiting and who declined.
 - [ ] Only the organizer can mark a ride Completed. Nothing is completed automatically.
 
 **Notifications**
@@ -513,8 +567,7 @@ These cover **[APPROVED]** requirements only.
 - [ ] Delivery uses a channel abstraction. No push or email is sent in the initial release.
 
 **Weather**
-- [ ] The weather policy is shown on ride detail, discovery results and calendar entries.
-- [ ] Organizers can send weather disruption notices, use Weather Review, and cancel or reschedule.
+- [ ] The weather policy is shown on ride detail, discovery results and calendar entries. Organizers can send disruption notices, use Weather Review, and cancel or reschedule.
 - [ ] No weather provider integration and no automatic weather cancellation.
 
 ---
@@ -522,4 +575,11 @@ These cover **[APPROVED]** requirements only.
 ## Revision history
 - **Revision 1:** Initial addendum.
 - **Revision 2:** Applied first-review decisions. Added approval labels, capacity and private-access sections.
-- **Revision 3:** Resolved all remaining product decisions from the second review. Added full-ride, capacity-reduction, invitation lifecycle, rejoin, reconfirmation-visibility and "Awaiting Completion" rules. Added the technical direction section (§10) and the conflicts/concerns register (§11). Updated scope labels, resolved decisions and acceptance criteria.
+- **Revision 3:** Resolved the second-review product decisions. Added technical direction and the conflicts register.
+- **Revision 4:**
+  - Applied the third-review decisions: "Left" label, organizer removal, link usage and expiry rules, access when a link ends, re-requests after a decline.
+  - Resolved C1–C8.
+  - Recorded Supabase PostgreSQL as the proposed database direction.
+  - Added the provisional-value label.
+  - Logged new contradictions and edge cases (X1–X9) and new decisions (N1–N11).
+  - Kept earlier proposed items unapproved (P1–P13).
