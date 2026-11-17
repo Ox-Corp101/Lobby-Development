@@ -2,7 +2,7 @@
 
 Lobby is a web-first, mobile-responsive app for the motorcycle riding community: plan group rides, find nearby rides and keep a personal ride calendar.
 
-**Status:** Milestone 1 (Secure Authentication and Rider Profile Creation) is in progress. Steps 1–2 (project setup and visual shell) are done. Authentication and profiles are not built yet.
+**Status:** Milestone 1 (Secure Authentication and Rider Profile Creation) is in progress. Steps 1–3 (project setup, visual shell, authentication screens) are done. The screens are not yet connected to Supabase, so sign-up and sign-in are not available yet.
 
 Planning documents live in [`docs/plan/`](docs/plan/).
 
