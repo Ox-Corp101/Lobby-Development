@@ -1,1 +1,107 @@
 @import 'tailwindcss';
+
+/*
+ * Lobby design tokens.
+ * Colours are defined once as CSS variables and switch automatically with the
+ * device's light/dark preference. Tailwind utilities (bg-canvas, text-ink, ...)
+ * read these variables, so components never hard-code a theme.
+ */
+@theme inline {
+  --color-canvas: var(--lobby-canvas);
+  --color-surface: var(--lobby-surface);
+  --color-surface-muted: var(--lobby-surface-muted);
+  --color-line: var(--lobby-line);
+  --color-ink: var(--lobby-ink);
+  --color-ink-muted: var(--lobby-ink-muted);
+  --color-accent: var(--lobby-accent);
+  --color-accent-hover: var(--lobby-accent-hover);
+  --color-on-accent: var(--lobby-on-accent);
+  --color-accent-ink: var(--lobby-accent-ink);
+  --color-mark: var(--lobby-mark);
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Light — "daylight asphalt" */
+  --lobby-canvas: #f6f6f4;
+  --lobby-surface: #ffffff;
+  --lobby-surface-muted: #eeeeeb;
+  --lobby-line: #dcdcd7;
+  --lobby-ink: #17181a;
+  --lobby-ink-muted: #50535a;
+  --lobby-accent: #f5a524; /* signal amber — primary actions only */
+  --lobby-accent-hover: #e8951a;
+  --lobby-on-accent: #17181a;
+  --lobby-accent-ink: #a14a06; /* amber for text/focus on light backgrounds */
+  --lobby-mark: #17181a;
+  --lobby-focus: var(--lobby-accent-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark — "night asphalt" */
+    --lobby-canvas: #0f1012;
+    --lobby-surface: #17181b;
+    --lobby-surface-muted: #1f2024;
+    --lobby-line: #2c2e33;
+    --lobby-ink: #f2f2ef;
+    --lobby-ink-muted: #a6a9b0;
+    --lobby-accent: #f5a524;
+    --lobby-accent-hover: #ffb73d;
+    --lobby-on-accent: #17181a;
+    --lobby-accent-ink: #f7b546;
+    --lobby-mark: #2a2c31;
+    --lobby-focus: var(--lobby-accent-ink);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--lobby-canvas);
+    color: var(--lobby-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Visible keyboard focus everywhere (mouse clicks don't show it). */
+  :focus-visible {
+    outline: 2px solid var(--lobby-focus);
+    outline-offset: 3px;
+  }
+}
+
+/* Road centre-line motif: a subtle dashed line, purely decorative. */
+@utility road-line {
+  height: 2px;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--lobby-line) 0 24px,
+    transparent 24px 40px
+  );
+}
+
+@utility road-line-vertical {
+  width: 2px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--lobby-line) 0 24px,
+    transparent 24px 40px
+  );
+}
+
+/* Respect the device's "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
