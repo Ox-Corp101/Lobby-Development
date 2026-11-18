@@ -31,7 +31,13 @@ export default function SignUpPage() {
       navigate('/check-email');
       return;
     }
-    setNotice({ tone: 'error', text: authErrorMessage(result) });
+    setNotice({
+      tone: 'error',
+      text:
+        result.kind === 'error'
+          ? 'We couldn’t create your account right now. Please try again.'
+          : authErrorMessage(result),
+    });
   });
 
   return (

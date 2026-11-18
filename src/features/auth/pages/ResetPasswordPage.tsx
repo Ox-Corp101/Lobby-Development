@@ -10,6 +10,7 @@ import {
   authErrorMessage,
   authService,
   readAuthCallback,
+  recoveryMarker,
   RECOVERY_LINK_TYPES,
   type AuthResult,
 } from '../authService';
@@ -45,7 +46,8 @@ export default function ResetPasswordPage() {
   const [linkResult, setLinkResult] = useState<AuthResult>();
   const [verifying, setVerifying] = useState(callback.kind === 'code');
   const inFlight = useRef(false);
-  const [updated, setUpdated] = useState(false);
+  // After a successful change: whether every session (all devices) was signed out.
+  const [updated, setUpdated] = useState<{ allDevices: boolean }>();
   const [notice, setNotice] = useState<string>();
 
   const {
@@ -64,7 +66,9 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     if (callback.kind !== 'code') return;
     let active = true;
-    void authService.exchangeCode(callback.code, callback.flowId).then((outcome) => {
+    void authService.exchangeCode(callback.code, callback.flowId).then(async (outcome) => {
+      // Mark this tab as being in a genuine recovery (S1) before showing the form.
+      if (outcome.kind === 'ok') await authService.markRecoverySession();
       if (!active) return;
       setLinkResult(outcome);
       setVerifying(false);
@@ -95,9 +99,11 @@ export default function ResetPasswordPage() {
     setNotice(undefined);
     const result = await authService.updatePassword(values);
     if (result.kind === 'ok') {
-      // Sign out this device so the rider proves the new password by signing in.
-      await authService.signOut();
-      setUpdated(true);
+      // S2: sign out every session of this account (all devices, including this
+      // one), so anyone else using the old password loses access. Falls back to
+      // this device only if that fails.
+      const signOut = await authService.signOutEverywhere();
+      setUpdated({ allDevices: signOut.kind === 'ok' });
       return;
     }
     setNotice(authErrorMessage(result));
@@ -107,7 +113,20 @@ export default function ResetPasswordPage() {
   if (updated) {
     return (
       <AuthCard title="Password updated">
-        <FormAlert tone="success" message="Your password has been changed. Please sign in again." />
+        <FormAlert
+          tone="success"
+          message={
+            updated.allDevices
+              ? 'Your password has been changed and you’ve been signed out on all devices. Please sign in again.'
+              : 'Your password has been changed. Please sign in again.'
+          }
+        />
+        {!updated.allDevices && (
+          <p className="mt-4 text-ink-muted">
+            We couldn’t confirm that your other devices were signed out. If you’re concerned, check
+            your connection and reset your password again.
+          </p>
+        )}
         <ButtonLink to="/sign-in" variant="primary" size="lg" className="mt-6 w-full">
           Sign in
         </ButtonLink>
@@ -188,9 +207,11 @@ export default function ResetPasswordPage() {
     return <Checking />;
   }
 
-  // The new-password form needs a session: from the verified recovery link,
-  // or because the rider is already signed in on this device.
-  if (auth.status === 'signedIn') {
+  // S1: the new-password form is shown ONLY during a genuine recovery — a
+  // recovery link processed in this tab within the last 60 minutes, for the
+  // signed-in user. Never to an ordinary signed-in session.
+  const inRecovery = auth.status === 'signedIn' && recoveryMarker.isValidFor(auth.session.user.id);
+  if (inRecovery) {
     return (
       <AuthCard title="Choose a new password" footer={<NewLinkFooter />}>
         <form noValidate onSubmit={onSubmit} className="space-y-5">
@@ -254,6 +275,21 @@ export default function ResetPasswordPage() {
             {linkResult ? 'Try again' : 'Continue'}
           </Button>
         </div>
+      </AuthCard>
+    );
+  }
+
+  // Signed in normally (not via a recovery link): no form. Changing the password
+  // requires proving access to the email account.
+  if (auth.status === 'signedIn') {
+    return (
+      <AuthCard title="Change your password">
+        <p className="text-ink-muted">
+          For your security, changing your password requires a reset link sent to your email.
+        </p>
+        <ButtonLink to="/forgot-password" variant="primary" size="lg" className="mt-6 w-full">
+          Email me a reset link
+        </ButtonLink>
       </AuthCard>
     );
   }

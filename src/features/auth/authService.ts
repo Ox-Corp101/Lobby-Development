@@ -25,6 +25,14 @@ export type AuthResult =
   | { kind: 'weak_password' }
   | { kind: 'same_password' }
   | { kind: 'rate_limited' }
+  /** Supabase won't accept this email address (e.g. a blocked test domain). */
+  | { kind: 'email_not_allowed' }
+  /** Sign-ups are turned off on the server. */
+  | { kind: 'signup_unavailable' }
+  /** Supabase rejected the request's input. */
+  | { kind: 'invalid_input' }
+  /** "Secure password change": this session is too old to change the password. */
+  | { kind: 'reauthentication_needed' }
   | { kind: 'network_error' }
   | { kind: 'error' };
 
@@ -58,6 +66,16 @@ function toResult(error: AuthError): AuthResult {
       return { kind: 'weak_password' };
     case 'same_password':
       return { kind: 'same_password' };
+    case 'email_address_invalid':
+      return { kind: 'email_not_allowed' };
+    case 'signup_disabled':
+    case 'email_provider_disabled':
+      return { kind: 'signup_unavailable' };
+    case 'validation_failed':
+      return { kind: 'invalid_input' };
+    case 'reauthentication_needed':
+    case 'reauthentication_not_valid':
+      return { kind: 'reauthentication_needed' };
     case 'over_request_rate_limit':
     case 'over_email_send_rate_limit':
       return { kind: 'rate_limited' };
@@ -207,6 +225,56 @@ function exchangeCode(code: string, flowId?: string): Promise<AuthResult> {
   return exchange;
 }
 
+/**
+ * Recovery marker (S1). Records, for THIS browser tab only, that a password
+ * recovery link was just processed for a given user, so the new-password form
+ * is shown only during a genuine recovery — not to any signed-in session.
+ * Contents: the user's ID and an expiry time (60 minutes). No token, code or
+ * password is ever stored. This is an app-level safeguard, not a security
+ * boundary: the server-side control is Supabase's "Secure password change".
+ */
+const RECOVERY_MARKER_KEY = 'lobby.passwordRecovery';
+const RECOVERY_MARKER_TTL_MS = 60 * 60 * 1000;
+
+export const recoveryMarker = {
+  isValidFor(userId: string | undefined): boolean {
+    if (!userId) return false;
+    try {
+      const raw = window.sessionStorage.getItem(RECOVERY_MARKER_KEY);
+      const marker = raw ? (JSON.parse(raw) as { userId?: unknown; expiresAt?: unknown }) : null;
+      return (
+        marker?.userId === userId &&
+        typeof marker.expiresAt === 'number' &&
+        marker.expiresAt > Date.now()
+      );
+    } catch {
+      return false;
+    }
+  },
+  clear(): void {
+    try {
+      window.sessionStorage.removeItem(RECOVERY_MARKER_KEY);
+    } catch {
+      // Storage unavailable: nothing to clear.
+    }
+  },
+};
+
+/** Sets the marker for the user of the session that was just created. */
+async function markRecoverySession(): Promise<void> {
+  try {
+    const { data } = await client().auth.getSession();
+    const userId = data.session?.user.id;
+    if (!userId) return;
+    window.sessionStorage.setItem(
+      RECOVERY_MARKER_KEY,
+      JSON.stringify({ userId, expiresAt: Date.now() + RECOVERY_MARKER_TTL_MS }),
+    );
+  } catch {
+    // Storage unavailable: the form simply won't be shown; the rider can request a new link.
+  }
+}
+
 export const CONFIRM_LINK_TYPES = ['email', 'signup'] as const;
 export const RECOVERY_LINK_TYPES = ['recovery'] as const;
 
@@ -214,18 +282,26 @@ export type EmailLink = NonNullable<ReturnType<typeof readEmailLink>>;
 
 export const authService = {
   async signUp({ email, password }: SignUpValues): Promise<AuthResult> {
-    const result = await run(() =>
-      client().auth.signUp({
+    try {
+      const { error } = await client().auth.signUp({
         email,
         password,
         options: { emailRedirectTo: appUrl('/auth/confirm') },
-      }),
-    );
-    // An already-registered email must look identical to a new one.
-    return result.kind === 'invalid_credentials' || result.kind === 'error' ? ok : result;
+      });
+      if (!error) return ok;
+      // An already-registered email must look identical to a new one, so the
+      // form can't be used to find out who has an account.
+      if (error.code === 'email_exists' || error.code === 'user_already_exists') return ok;
+      // Every other problem is reported, instead of a misleading "check your email".
+      return toResult(error);
+    } catch {
+      return { kind: 'network_error' };
+    }
   },
 
   signIn({ email, password }: SignInValues): Promise<AuthResult> {
+    // A normal sign-in is never a recovery session.
+    recoveryMarker.clear();
     return run(() => client().auth.signInWithPassword({ email, password }));
   },
 
@@ -236,6 +312,7 @@ export const authService = {
    * therefore judged by whether a session remains on this device.
    */
   async signOut(): Promise<AuthResult> {
+    recoveryMarker.clear();
     const result = await run(() => client().auth.signOut({ scope: 'local' }));
     if (result.kind === 'ok') return result;
     try {
@@ -244,6 +321,21 @@ export const authService = {
     } catch {
       return result;
     }
+  },
+
+  /**
+   * Used ONLY after a successful password reset (S2): revokes the refresh
+   * tokens of every session of this account, on all devices, including this
+   * one. Ordinary sign-out stays device-only (`signOut`). If the global call
+   * fails (e.g. offline), this device is still signed out locally and the
+   * failure is returned so the screen can say other devices weren't confirmed.
+   */
+  async signOutEverywhere(): Promise<AuthResult> {
+    recoveryMarker.clear();
+    const result = await run(() => client().auth.signOut({ scope: 'global' }));
+    if (result.kind === 'ok') return result;
+    await run(() => client().auth.signOut({ scope: 'local' }));
+    return result;
   },
 
   async requestPasswordReset({ email }: EmailOnlyValues): Promise<AuthResult> {
@@ -270,8 +362,11 @@ export const authService = {
    * rider deliberately presses a button — never on page load — so link-scanning
    * email security tools can't use up the one-time token.
    */
-  verifyEmailLink({ tokenHash, type }: EmailLink): Promise<AuthResult> {
-    return run(() => client().auth.verifyOtp({ token_hash: tokenHash, type }));
+  async verifyEmailLink({ tokenHash, type }: EmailLink): Promise<AuthResult> {
+    recoveryMarker.clear();
+    const result = await run(() => client().auth.verifyOtp({ token_hash: tokenHash, type }));
+    if (result.kind === 'ok' && type === 'recovery') await markRecoverySession();
+    return result;
   },
 
   /**
@@ -280,6 +375,9 @@ export const authService = {
    * Called automatically, once, when the landing page opens.
    */
   exchangeCode,
+
+  /** Marks this tab's session as a password-recovery session (after a recovery code exchange). */
+  markRecoverySession,
 
   updatePassword({ password }: ResetPasswordValues): Promise<AuthResult> {
     return run(() => client().auth.updateUser({ password }));
@@ -302,6 +400,14 @@ export function authErrorMessage(result: AuthResult): string {
       return 'Please choose a different password.';
     case 'same_password':
       return 'Your new password must be different from your current one.';
+    case 'email_not_allowed':
+      return 'This email address can’t be used. Please use a different email address.';
+    case 'signup_unavailable':
+      return 'New accounts can’t be created right now. Please try again later.';
+    case 'invalid_input':
+      return 'Please check your email address and password, then try again.';
+    case 'reauthentication_needed':
+      return 'For your security, please request a new reset link.';
     case 'rate_limited':
       return 'Too many attempts. Please wait a while and try again.';
     case 'network_error':

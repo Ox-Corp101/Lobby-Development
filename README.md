@@ -71,7 +71,8 @@ The publishable key does not protect any data by itself. Data access is controll
 
 ### Required Supabase dashboard settings
 
-- **Authentication → Sign In / Providers → Email:** email provider enabled, **Confirm email** on, minimum password length 8, no required characters.
+- **Authentication → Sign In / Providers → Email:** email provider enabled, **Confirm email** on, **Secure password change** on, minimum password length 8, no required characters.
+  - **Secure password change:** Supabase requires re-authentication before changing the password of a session created more than 24 hours ago. Recovery-link sessions are always new, so password resets are unaffected. Sessions younger than 24 hours can still change the password without re-authentication (Supabase's design).
 - **Authentication → URL Configuration:** Site URL `http://localhost:5173`, Redirect URLs `http://localhost:5173/**`.
 - **Email templates: leave them as Supabase's defaults.** New Free-plan projects can't customise authentication email templates without a custom SMTP provider.
 
@@ -98,7 +99,14 @@ Security notes:
 - **Email confirmation:** opening the link in the browser where the rider signed up confirms the email **and** signs them in. Opening it in another browser still confirms the email, but the rider then signs in with their password.
 - **Password reset:** the link **only works in the browser where the reset was requested.** In any other browser (including an email app's built-in browser on a phone), Lobby asks the rider to open it in the original browser or request a new link there.
 
-**Password reset form:** the recovery form asks only for the new password. Supabase rejects a new password that is the same as the current one, and Lobby shows "Your new password must be different from your current one." After a successful change, Lobby signs out this device so the rider signs in with the new password.
+**Password reset form:**
+
+- The form asks only for the new password. Supabase rejects a new password that is the same as the current one, and Lobby shows "Your new password must be different from your current one."
+- **The form appears only during a genuine recovery.** After a recovery link is processed, Lobby stores a small marker in this browser tab's `sessionStorage` (the user's ID and an expiry 60 minutes later; never a token, code or password). The form is shown only if the marker matches the signed-in user and hasn't expired, so it survives a reload of that tab. The marker is cleared on sign-in, sign-out and after the password is changed. A rider who is signed in normally sees "Change your password" with a button to email themselves a reset link instead. This is an app-level safeguard, not a complete security boundary; Supabase's **Secure password change** setting is the server-side control.
+- **After a successful change, Lobby signs out every session of the account** (`scope: 'global'`, all devices including this one), so anyone using the old password loses access. If that fails (for example offline), this device is still signed out and the screen says other devices couldn't be confirmed. Supabase can't cancel access tokens already issued: other devices keep working until their current token expires (by default within about an hour), then can't renew.
+- **Ordinary Sign out** signs out this device only.
+
+**Sign-up errors:** an already-registered email always gets the same "Check your email" page as a new one, so the form can't reveal who has an account. Other problems get a clear message: an email address Supabase won't accept, sign-ups being unavailable, invalid input, or "We couldn't create your account right now".
 
 **Custom templates later:** Lobby also supports a `token_hash` link format (verified only when the rider presses a button), for when custom SMTP and custom templates are configured.
 
