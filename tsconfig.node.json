@@ -17,5 +17,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "eslint.config.js", "src/lib/secretKeys.ts"]
+  "include": [
+    "vite.config.ts",
+    "eslint.config.js",
+    "src/lib/secretKeys.ts",
+    "playwright.config.ts",
+    "e2e"
+  ]
 }
