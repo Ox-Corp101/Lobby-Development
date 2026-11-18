@@ -49,6 +49,10 @@ export default function ResetPasswordPage() {
   // After a successful change: whether every session (all devices) was signed out.
   const [updated, setUpdated] = useState<{ allDevices: boolean }>();
   const [notice, setNotice] = useState<string>();
+  // "Email me a reset link" for a rider who is signed in normally.
+  const [ownLinkRequest, setOwnLinkRequest] = useState<{ sending: boolean; result?: AuthResult }>({
+    sending: false,
+  });
 
   const {
     register,
@@ -82,6 +86,17 @@ export default function ResetPasswordPage() {
   // single exchange attempt has finished — after any outcome it can't be used
   // again (supabase-js deletes the verifier) — so it's never removed early.
   useCleanAuthUrl(callback.kind !== 'code' || linkResult !== undefined);
+
+  // Sends a reset email to the signed-in rider's own address and waits for
+  // Supabase's answer before saying anything. The address comes from the
+  // current session; it isn't displayed or logged.
+  const sendOwnResetLink = async () => {
+    const email = auth.status === 'signedIn' ? auth.session.user.email : undefined;
+    if (!email || ownLinkRequest.sending) return;
+    setOwnLinkRequest({ sending: true });
+    const result = await authService.requestPasswordReset({ email });
+    setOwnLinkRequest({ sending: false, result });
+  };
 
   // Token-hash links only (a PKCE code can't be retried).
   const verifyLink = async () => {
@@ -282,14 +297,41 @@ export default function ResetPasswordPage() {
   // Signed in normally (not via a recovery link): no form. Changing the password
   // requires proving access to the email account.
   if (auth.status === 'signedIn') {
+    const sent = ownLinkRequest.result?.kind === 'ok';
     return (
       <AuthCard title="Change your password">
         <p className="text-ink-muted">
           For your security, changing your password requires a reset link sent to your email.
         </p>
-        <ButtonLink to="/forgot-password" variant="primary" size="lg" className="mt-6 w-full">
-          Email me a reset link
-        </ButtonLink>
+        <div className="mt-6 space-y-4">
+          <FormAlert
+            tone={sent ? 'success' : 'error'}
+            message={
+              ownLinkRequest.result
+                ? sent
+                  ? 'We’ve sent a reset link to your email address. Open it in this browser to choose a new password.'
+                  : authErrorMessage(ownLinkRequest.result)
+                : undefined
+            }
+          />
+          {!sent &&
+            (auth.session.user.email ? (
+              <Button
+                variant="primary"
+                size="lg"
+                className="w-full"
+                loading={ownLinkRequest.sending}
+                loadingLabel="Sending link…"
+                onClick={sendOwnResetLink}
+              >
+                Email me a reset link
+              </Button>
+            ) : (
+              <ButtonLink to="/forgot-password" variant="primary" size="lg" className="w-full">
+                Request a reset link
+              </ButtonLink>
+            ))}
+        </div>
       </AuthCard>
     );
   }

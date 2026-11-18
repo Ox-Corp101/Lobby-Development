@@ -33,6 +33,8 @@ export type AuthResult =
   | { kind: 'invalid_input' }
   /** "Secure password change": this session is too old to change the password. */
   | { kind: 'reauthentication_needed' }
+  /** Supabase refused a password-reset request for an unexpected reason. */
+  | { kind: 'reset_request_failed' }
   | { kind: 'network_error' }
   | { kind: 'error' };
 
@@ -338,12 +340,25 @@ export const authService = {
     return result;
   },
 
+  /**
+   * Sends a password-reset email. Success stays neutral ("If an account
+   * exists…"): Supabase answers unknown addresses with success, not an error,
+   * so reporting other errors doesn't reveal who has an account. As a
+   * precaution, a `user_not_found` answer is also treated as neutral.
+   */
   async requestPasswordReset({ email }: EmailOnlyValues): Promise<AuthResult> {
-    const result = await run(() =>
-      client().auth.resetPasswordForEmail(email, { redirectTo: appUrl('/reset-password') }),
-    );
-    // Neutral unless the rider needs to slow down or is offline.
-    return result.kind === 'rate_limited' || result.kind === 'network_error' ? result : ok;
+    try {
+      const { error } = await client().auth.resetPasswordForEmail(email, {
+        redirectTo: appUrl('/reset-password'),
+      });
+      if (!error || error.code === 'user_not_found') return ok;
+      const result = toResult(error);
+      if (result.kind === 'rate_limited' || result.kind === 'network_error') return result;
+      // Never report an unexpected failure as "we've sent a link".
+      return { kind: 'reset_request_failed' };
+    } catch {
+      return { kind: 'network_error' };
+    }
   },
 
   async resendConfirmation({ email }: EmailOnlyValues): Promise<AuthResult> {
@@ -408,6 +423,8 @@ export function authErrorMessage(result: AuthResult): string {
       return 'Please check your email address and password, then try again.';
     case 'reauthentication_needed':
       return 'For your security, please request a new reset link.';
+    case 'reset_request_failed':
+      return 'We couldn’t send a reset link right now. Please try again.';
     case 'rate_limited':
       return 'Too many attempts. Please wait a while and try again.';
     case 'network_error':
