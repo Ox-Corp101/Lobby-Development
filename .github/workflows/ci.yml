@@ -1,0 +1,66 @@
+# Lobby automated checks (M0.3).
+#
+# Runs the same checks a developer runs locally: unit tests, lint, type check,
+# formatting, production build and browser tests.
+#
+# Safety: this workflow uses no secrets and never contacts a real Supabase
+# project. The browser tests start the app with the fake Supabase settings in
+# playwright.config.ts, and a network guard (e2e/support/fixtures.ts) blocks
+# and fails any request to another host. No real emails or accounts are used.
+name: CI
+
+on:
+  push:
+    branches: [claude/charming-dijkstra-lfbs3p]
+  pull_request:
+    branches: [claude/charming-dijkstra-lfbs3p]
+
+# Read-only access to the repository; nothing else.
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request cancels the older run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests, lint, type check, format, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22 (LTS)
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Formatting
+        run: npx prettier --check .
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Playwright Chromium and system libraries
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests (fake Supabase, network-isolated)
+        run: npm run test:e2e
