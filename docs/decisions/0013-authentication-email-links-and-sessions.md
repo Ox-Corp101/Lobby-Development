@@ -31,3 +31,33 @@ Supabase's Free plan can't customise email templates without custom SMTP, so Lob
 
 ## Related
 [README: How email links work](../../README.md#how-email-links-work-pkce) · [ADR 0001](0001-shared-supabase-backend.md)
+
+## Verification update: M0.5 manual tests (19 November 2026)
+
+This section is added after acceptance. It records real-Supabase test results and **doesn't change the decision above**. The earlier "not yet verified" statements in this record describe the position before these tests and are kept as history.
+
+**Set-up**
+- The product owner tested on Windows, against the real Lobby Supabase project.
+- **Chrome and Microsoft Edge on the same physical computer.** Separate physical devices were not tested.
+- Supabase settings were inspected and not changed:
+  - email provider on; secure email change on; secure password change on
+  - minimum password length 8, with no required character types
+  - Site URL `http://localhost:5173`; Redirect URLs `http://localhost:5173/**`
+  - access-token lifetime 3,600 seconds
+  - session time-box and inactivity timeout both 0 (never)
+  - detection and revocation of compromised refresh tokens on, with a 10-second reuse interval
+- Audit-log times are recorded **exactly as displayed** in the Supabase logs. Their time zone wasn't independently established.
+
+| Check | Result |
+|---|---|
+| Signed-in "Email me a reset link": one click; Lobby showed the confirmation; the real reset email arrived | **PASS** |
+| PKCE recovery link opened in the same Chrome browser that requested it: "Choose a new password" appeared | **PASS** |
+| Same password submitted during recovery: "Your new password must be different from your current one." The log showed HTTP 422 at 16:19:42 | **PASS** |
+| 72-byte password (36 × é, precomposed, byte count checked): accepted by Supabase as the new password; sign-in with it succeeded | **PASS** |
+| 74-byte password (37 × é): blocked by Lobby's client-side validation and never submitted | **PASS** |
+| A different 70-byte password (35 × é): rejected at sign-in because it wasn't the active password. This isn't evidence of any length rule. | **PASS** |
+| Global sign-out: password update `PUT /auth/v1/user`, HTTP 200, at 16:22:35, then `POST /auth/v1/logout?scope=global`, HTTP 204, at 16:22:36 (both 19 November 2026). Edge, signed in beforehand, **stayed signed in at first**; after the 60-minute access-token window, reloading Edge showed Lobby's sign-in page. | **PASS, qualified:** refresh sessions were revoked, but the existing access token stayed usable until it expired. Signing out is not instant. |
+| Original password restored through a second genuine recovery email; signing in with it worked and `/profile` loaded | **PASS** |
+| Rejected registration | **SKIPPED: not tested.** Avoided creating accounts and using email quota. To be checked with the launch email provider (OD-28). |
+
+**Still unverified:** how Supabase handles passwords longer than 72 bytes, since Lobby never sends them, and cross-device behaviour on separate physical devices.

@@ -16,6 +16,7 @@ Product requirements, decision records and planning documents live in [`docs/`](
 ## Prerequisites
 
 - **Node.js 22 or later** (includes npm). Check with `node -v`.
+  - On Windows, install the Node.js 22 LTS release from [nodejs.org](https://nodejs.org/).
   - On macOS, install it from [nodejs.org](https://nodejs.org/) or with Homebrew: `brew install node@22`.
 
 ## Getting started
@@ -116,7 +117,7 @@ Security notes:
 
 ### Development limitations
 
-- **Email links point to `http://localhost:5173`**, so they only work on the same computer that is running `npm run dev`. Open them on that Mac, not on a phone or another computer. Cross-device testing needs a reachable staging or production address, which comes later.
+- **Email links point to `http://localhost:5173`**, so they only work on the same computer that is running `npm run dev`. Open them on that computer, not on a phone or another computer. Cross-device testing needs a reachable staging or production address, which comes later.
 - **Supabase's built-in email sender has a default limit of 2 emails per hour** and is meant for testing only. It is not suitable for production.
 - **Default email templates (Free plan):** Supabase's own wording and sender are used, and the template can't be changed without custom SMTP.
 - **Email security scanners** that pre-open links can use up a default-template link before the rider clicks it. For confirmation the account is still confirmed (the rider just signs in); for password reset the rider has to request a new link.

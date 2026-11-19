@@ -102,7 +102,7 @@ Every entry needs **product-owner approval** unless it says otherwise.
 
 ### OD-04. Local Supabase and environments
 - **Question:**
-  - Install Docker Desktop on your Mac for a local Supabase (needed for automated security-rule tests)?
+  - Install Docker Desktop on your Windows development computer for a local Supabase (needed for automated security-rule tests)? Docker Desktop on Windows usually runs through WSL 2 (Windows Subsystem for Linux).
   - Confirm the environment plan: local for building, the current hosted project as "development", a separate production project only at launch.
 - **Why it matters:** Automated RLS tests were approved (decision A2) and need a local database. Docker uses about 2–4 GB of memory while running, and its licence terms should be checked for your situation.
 - **Needed by:** M1.2.
@@ -338,6 +338,7 @@ Every entry needs **product-owner approval** unless it says otherwise.
 - **Why it matters:** It's a launch requirement. Supabase's built-in email is rate-limited and can't use custom templates; custom templates enable the token-hash links (cross-browser) already supported in code.
 - **Needed by:** Phase 6.
 - **Recommendation so far:** Present the options, costs and a recommendation before choosing (M1 decision 10).
+- **Also to verify then:** Lobby's rejected-registration messages against real Supabase. This was skipped in M0.5 (19 November 2026) to avoid creating accounts or using email quota.
 - **Approval required:** Yes.
 
 ### OD-29. Store accounts, download links and install prompts
