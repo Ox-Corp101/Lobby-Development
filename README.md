@@ -2,9 +2,9 @@
 
 Lobby is a web-first, mobile-responsive app for the motorcycle riding community: plan group rides, find nearby rides and keep a personal ride calendar.
 
-**Status:** Milestone 1 (Secure Authentication and Rider Profile Creation) is in progress. Steps 1–4 are done: project setup, visual shell, authentication screens, and Supabase authentication. Rider profiles are not built yet.
+**Status:** Authentication is complete: project setup, visual shell, authentication screens and Supabase authentication. Phase 0 (foundation hardening) is in progress: unit tests, browser tests and GitHub Actions CI are in place. Rider profiles and all ride features are not built yet.
 
-Planning documents live in [`docs/plan/`](docs/plan/).
+Product requirements, decision records and planning documents live in [`docs/`](docs/README.md).
 
 ## Tech stack
 
@@ -42,6 +42,8 @@ Then open <http://localhost:5173>. The dev server always uses port 5173. If that
 | `npm run typecheck` | Runs the TypeScript compiler without producing output.       |
 | `npm run lint`      | Checks code quality with ESLint.                             |
 | `npm run format`    | Formats the code with Prettier.                              |
+| `npm test`          | Runs the unit tests (Vitest).                                |
+| `npm run test:e2e`  | Runs the browser tests (Playwright) against a fake Supabase. |
 
 ## Supabase setup
 
