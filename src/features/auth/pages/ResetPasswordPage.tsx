@@ -46,7 +46,7 @@ export default function ResetPasswordPage() {
   const [linkResult, setLinkResult] = useState<AuthResult>();
   const [verifying, setVerifying] = useState(callback.kind === 'code');
   const inFlight = useRef(false);
-  // After a successful change: whether every session (all devices) was signed out.
+  // After a successful change: whether the global sign-out request succeeded.
   const [updated, setUpdated] = useState<{ allDevices: boolean }>();
   const [notice, setNotice] = useState<string>();
   // "Email me a reset link" for a rider who is signed in normally.
@@ -114,9 +114,11 @@ export default function ResetPasswordPage() {
     setNotice(undefined);
     const result = await authService.updatePassword(values);
     if (result.kind === 'ok') {
-      // S2: sign out every session of this account (all devices, including this
-      // one), so anyone else using the old password loses access. Falls back to
-      // this device only if that fails.
+      // S2: request a global sign-out. It revokes the refresh tokens of every
+      // session of this account, so other devices can't renew their sign-in.
+      // Access tokens already issued stay valid until they expire, so other
+      // devices aren't signed out immediately. Falls back to signing out this
+      // device only if the request fails.
       const signOut = await authService.signOutEverywhere();
       setUpdated({ allDevices: signOut.kind === 'ok' });
       return;
@@ -132,7 +134,7 @@ export default function ResetPasswordPage() {
           tone="success"
           message={
             updated.allDevices
-              ? 'Your password has been changed and you’ve been signed out on all devices. Please sign in again.'
+              ? 'Your password has been changed. Other devices may remain signed in until their current access tokens expire. Please sign in again.'
               : 'Your password has been changed. Please sign in again.'
           }
         />

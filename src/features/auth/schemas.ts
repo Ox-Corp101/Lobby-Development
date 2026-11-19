@@ -3,10 +3,12 @@ import { z } from 'zod';
 /**
  * Password limits.
  * - Minimum: 8 characters (counted as user-visible characters, so an emoji is 1).
- * - Maximum: 72 UTF-8 BYTES — PROVISIONAL. Supabase hashes passwords with bcrypt,
- *   which works on bytes, so accented letters (2 bytes) and emoji (4 bytes) use
- *   up more of the limit. Must be confirmed against the hosted Supabase project
- *   before this rule is treated as final.
+ * - Maximum: 72 UTF-8 bytes. Supabase hashes passwords with bcrypt, which works
+ *   on bytes, so accented letters (2 bytes) and emoji (4 bytes) use up more of
+ *   the limit. Lobby's 72-byte limit was confirmed in M0.5 (19 November 2026):
+ *   Supabase accepted a 72-byte password and it works for sign-in. Passwords
+ *   longer than 72 bytes are blocked by Lobby before submission, so Supabase's
+ *   own handling of them remains unverified (see requirement B-4).
  * No uppercase / number / symbol requirements (approved).
  */
 export const PASSWORD_MIN_LENGTH = 8;

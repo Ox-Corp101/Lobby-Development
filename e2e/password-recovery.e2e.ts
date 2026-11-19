@@ -79,7 +79,7 @@ test.describe('Password recovery with a reset link (PKCE)', () => {
     fake.addUser(RIDER.email, RIDER.password);
   });
 
-  test('full recovery: new password saved, all devices signed out, old password stops working', async ({
+  test('full recovery: new password saved, global sign-out requested, old password stops working', async ({
     page,
     fake,
   }) => {
@@ -102,7 +102,16 @@ test.describe('Password recovery with a reset link (PKCE)', () => {
     await newPasswordField(page).fill(NEW_PASSWORD);
     await page.getByRole('button', { name: 'Update password' }).click();
     await expect(page.getByRole('heading', { name: 'Password updated' })).toBeVisible();
-    await expect(page.getByText('signed out on all devices', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText(
+        'Other devices may remain signed in until their current access tokens expire',
+        {
+          exact: false,
+        },
+      ),
+    ).toBeVisible();
+    // Regression: never claim other devices were signed out immediately.
+    await expect(page.getByText('signed out on all devices', { exact: false })).toHaveCount(0);
     expect(fake.count('POST /logout?scope=global')).toBe(1);
     expect(fake.passwordOf(RIDER.email)).toBe(NEW_PASSWORD);
     expect(fake.sessionCount(RIDER.email)).toBe(0);
@@ -117,7 +126,7 @@ test.describe('Password recovery with a reset link (PKCE)', () => {
     await signIn(page, RIDER.email, NEW_PASSWORD);
   });
 
-  test('a rider signed in on another device is signed out by the reset', async ({
+  test('a reset requests global sign-out for sessions in another browser', async ({
     page,
     fake,
     openOtherBrowser,
@@ -129,7 +138,14 @@ test.describe('Password recovery with a reset link (PKCE)', () => {
     await page.goto(fake.emailLink('recovery', RIDER.email));
     await newPasswordField(page).fill(NEW_PASSWORD);
     await page.getByRole('button', { name: 'Update password' }).click();
-    await expect(page.getByText('signed out on all devices', { exact: false })).toBeVisible();
+    await expect(
+      page.getByText(
+        'Other devices may remain signed in until their current access tokens expire',
+        {
+          exact: false,
+        },
+      ),
+    ).toBeVisible();
     expect(fake.sessionCount(RIDER.email)).toBe(0);
   });
 
